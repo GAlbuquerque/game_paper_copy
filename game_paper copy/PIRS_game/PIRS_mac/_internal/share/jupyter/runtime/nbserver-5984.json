@@ -1,0 +1,12 @@
+{
+  "base_url": "/",
+  "hostname": "localhost",
+  "notebook_dir": "/Users/gustavo",
+  "password": false,
+  "pid": 5984,
+  "port": 8891,
+  "secure": false,
+  "sock": "",
+  "token": "e67d8f14c4672eb7b2c0f45641c3f9a0e40f4bd5468de379",
+  "url": "http://localhost:8891/"
+}

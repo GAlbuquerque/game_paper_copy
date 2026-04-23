@@ -1,0 +1,19 @@
+LICENSE / DISCLAIMER
+
+Copyright © 2025 Gustavo Tovar Albuquerque
+
+You may copy and share this game freely, including for educational use, as long as you do not sell it and do not modify it.
+Commercial resale or modified versions are not permitted without written permission.
+
+The software is provided “as is,” without warranty of any kind.
+By running it you agree that the author is not responsible for any damages,
+losses, or issues that may result from its use.
+
+
+
+Charts you save in the game will appear in your user folder:
+	•	macOS: ~/EconGame/charts/
+	•	Windows: C:\Users\YOURNAME\EconGame\charts\
+
+
+That’s it — enjoy the game!

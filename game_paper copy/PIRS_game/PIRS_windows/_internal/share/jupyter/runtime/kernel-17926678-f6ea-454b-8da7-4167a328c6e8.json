@@ -1,0 +1,13 @@
+{
+  "shell_port": 62386,
+  "iopub_port": 62387,
+  "stdin_port": 62388,
+  "control_port": 62390,
+  "hb_port": 62389,
+  "ip": "127.0.0.1",
+  "key": "de124635-f3c93f70682bc16739007c6c",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "python3",
+  "jupyter_session": "C:\\Users\\gta50\\Dropbox\\game_paper\\main_gui3.py"
+}
