@@ -232,6 +232,8 @@ class EconomicGameApp:
         self.plot_graphs()
 
     def _reset_economy_for_bootstrap(self):
+        if not hasattr(self, "scenario_name"):
+            self.scenario_name = "Random"
         self.economy = Economy(
             difficulty=self.difficulty,
             scenario=self._sample_scenario(self.scenario_name),
@@ -258,13 +260,14 @@ class EconomicGameApp:
                 self.rate_entry.delete(0, tk.END)
 
     def _apply_bootstrap_persona(self):
-        if self.scenario_name == "Stable Economy":
+        scenario_name = getattr(self, "scenario_name", "Random")
+        if scenario_name == "Stable Economy":
             self.economy.cb_persona = "good"
-        elif self.scenario_name == "Stagflation":
+        elif scenario_name == "Stagflation":
             self.economy.cb_persona = "dove"
-        elif self.scenario_name == "Hyperinflation":
+        elif scenario_name == "Hyperinflation":
             self.economy.cb_persona = "careless"
-        elif self.scenario_name == "Depression":
+        elif scenario_name == "Depression":
             self.economy.cb_persona = "hawk"
 
     def _apply_bootstrap_overrides_before_turn(self, idx, total_turns):
