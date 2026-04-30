@@ -787,14 +787,14 @@ class EconomicGameApp:
             text="Play Again (Same Settings)",
             command=self.new_game,
         )
-        self.play_again_button.grid(row=8, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=4)
+        self.play_again_button.grid(row=8, column=0, sticky=(tk.W, tk.E), padx=4)
 
         self.main_menu_button = ttk.Button(
             self.main_frame,
             text="Main Menu",
             command=self.return_to_main_menu,
         )
-        self.main_menu_button.grid(row=8, column=2, sticky=(tk.W, tk.E), padx=4)
+        self.main_menu_button.grid(row=8, column=1, sticky=(tk.W, tk.E), padx=4)
 
         self.save_graph_button = ttk.Button(
             self.main_frame,
