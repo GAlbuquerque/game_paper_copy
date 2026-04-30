@@ -781,6 +781,7 @@ class EconomicGameApp:
         window.destroy()
         self.next_button.config(state=tk.DISABLED)
         self.rate_entry.config(state=tk.DISABLED)
+        self._compress_layout_for_post_retire()
 
         self.end_label = ttk.Label(
             self.main_frame,
@@ -815,6 +816,13 @@ class EconomicGameApp:
             command=self.save_chart,
         )
         self.save_graph_button.grid(row=0, column=2, sticky=(tk.W, tk.E), padx=2)
+
+    def _compress_layout_for_post_retire(self):
+        self.news_text.configure(height=4)
+        self.latest_event_label.configure(font=("Helvetica", 13, "bold"), height=2, wraplength=560)
+        self.fig.set_size_inches(6, 3.2)
+        self.fig.tight_layout()
+        self.canvas.draw()
 
     def show_event_details(self, event):
         event_window = tk.Toplevel(self.root)
@@ -856,6 +864,7 @@ class EconomicGameApp:
     def new_game(self):
         self.next_button.config(state=tk.NORMAL)
         self.rate_entry.config(state=tk.NORMAL)
+        self._restore_layout_defaults()
         if hasattr(self, "end_label"):
             self.end_label.destroy()
         if hasattr(self, "play_again_button"):
@@ -873,6 +882,10 @@ class EconomicGameApp:
     def return_to_main_menu(self):
         self.main_frame.destroy()
         GameLauncher(self.root)
+
+    def _restore_layout_defaults(self):
+        self.news_text.configure(height=5)
+        self.latest_event_label.configure(font=("Helvetica", 16, "bold"), height=3, wraplength=600)
 
     def save_chart(self):
         charts_dir = Path.home() / "EconGame" / "charts"
