@@ -302,9 +302,9 @@ class Economy:
         sens = max(self.indicators.inflation_rate / 4, 0.5)
         adaptive_beta = min(max(0.0, 1.0 - 0.2 * reputation), 1)
         inflation_persistence = self.beta1["inflation"]
-        if self.simplified_dynamics:
-            inflation_persistence = 0.35
-            gap_effect *= 0.4
+        #if self.simplified_dynamics:
+            #inflation_persistence = 0.35
+            #gap_effect *= 0.4
         adaptive_term = (
             adaptive_beta
             * inflation_persistence
@@ -377,6 +377,8 @@ class Economy:
             weight * gap
             for weight, gap in zip(normalized_weights, self.historical_gaps[-11:-1])
         )
+        if self.simplified_dynamics:
+                weighted_gap = gap at -1
 
         if weighted_gap >= 0:
             gap_effect = -0.1 * weighted_gap
