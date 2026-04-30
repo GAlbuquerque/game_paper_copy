@@ -52,6 +52,7 @@ class EconomicGameApp:
         self.bootstrap_initial_history()
         self._configure_root_grid()
         self.root.after(100, self.print_window_size)
+        self.root.after(150, self.lock_window_size)
         self.configure_styles()
 
     def _configure_colors(self):
@@ -427,6 +428,15 @@ class EconomicGameApp:
         else:
             print("The window may not fit well on the screen.")
 
+    def lock_window_size(self):
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        self.root.geometry(f"{width}x{height}")
+        self.root.minsize(width, height)
+        self.root.maxsize(width, height)
+        self.root.resizable(False, False)
+
     def create_stats_panel(self):
         ttk.Label(self.stats_frame, text="Inflation Rate:", style="Main.TLabel").grid(
             row=0,
@@ -782,26 +792,31 @@ class EconomicGameApp:
         )
         self.end_label.grid(row=7, column=0, columnspan=3, pady=15)
 
+        self.post_retire_actions_frame = ttk.Frame(self.main_frame, style="Main.TFrame")
+        self.post_retire_actions_frame.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=4)
+        for column in range(3):
+            self.post_retire_actions_frame.grid_columnconfigure(column, weight=1)
+
         self.play_again_button = ttk.Button(
-            self.main_frame,
+            self.post_retire_actions_frame,
             text="Play Again (Same Settings)",
             command=self.new_game,
         )
-        self.play_again_button.grid(row=8, column=0, sticky=(tk.W, tk.E), padx=4)
+        self.play_again_button.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=2)
 
         self.main_menu_button = ttk.Button(
-            self.main_frame,
+            self.post_retire_actions_frame,
             text="Main Menu",
             command=self.return_to_main_menu,
         )
-        self.main_menu_button.grid(row=8, column=1, sticky=(tk.W, tk.E), padx=4)
+        self.main_menu_button.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=2)
 
         self.save_graph_button = ttk.Button(
-            self.main_frame,
+            self.post_retire_actions_frame,
             text="Save Chart",
             command=self.save_chart,
         )
-        self.save_graph_button.grid(row=9, column=2, sticky=(tk.W, tk.E), padx=4, pady=(6, 0))
+        self.save_graph_button.grid(row=0, column=2, sticky=(tk.W, tk.E), padx=2)
 
     def show_event_details(self, event):
         event_window = tk.Toplevel(self.root)
@@ -851,6 +866,8 @@ class EconomicGameApp:
             self.main_menu_button.destroy()
         if hasattr(self, "save_graph_button"):
             self.save_graph_button.destroy()
+        if hasattr(self, "post_retire_actions_frame"):
+            self.post_retire_actions_frame.destroy()
 
         self.reset_graph_panel()
         self.bootstrap_initial_history()
