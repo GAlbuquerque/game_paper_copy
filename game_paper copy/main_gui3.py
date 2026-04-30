@@ -264,7 +264,7 @@ class EconomicGameApp:
         if self.scenario_name == "Stable Economy" and idx >= total_turns - 10:
             self.economy.last_event_quarter = self.economy.current_quarter
 
-        if self.scenario_name == "Hyperinflation":
+        if self.scenario_name == "Hyperinflation" :
             if getattr(self, "_hyperinflation_prob_boosted", False):
                 return
             for event in self.economy.events:
