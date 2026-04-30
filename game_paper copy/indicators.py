@@ -19,7 +19,7 @@ class EconomicIndicators:
 
     @classmethod
     def generate_random_initial_state(cls):
-        natural_unemployment = max(3, np.random.normal(6, 5))
+        natural_unemployment = max(3, np.random.normal(5, 5))
         unemployment = max(natural_unemployment + np.random.normal(0, 5), 1)
         inflation = max(np.random.normal(1.5, 0.5), np.random.normal(3.0, 10))
         real_rate_eq = max(float(np.random.normal(0.5, 2)), -0.5)  

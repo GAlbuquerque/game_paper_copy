@@ -389,7 +389,7 @@ class Economy:
             natural_rate = self.indicators.natural_unemployment_rate
             unemployment_rate = self.indicators.unemployment_rate
             inflation_rate = self.indicators.inflation_rate
-            gap_effect = min( (0.2 * natural_rate / (unemployment_rate + 1) + 0.1) * (-weighted_gap), 0.05*inflation_rate)
+            gap_effect = min( (0.2 * natural_rate / (unemployment_rate + 1) + 0.1) * (-weighted_gap), 0.1*max(inflation_rate,1))
         
         return gap_effect
 
