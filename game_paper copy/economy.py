@@ -35,6 +35,7 @@ class Economy:
         self.historical_gaps = [0] * 11
         self.historical_data = self._build_historical_frame()
         self.last_event_quarter = -10_000
+        self.offset = 0
 
     def _difficulty_event_cooldown(self, difficulty):
         return {
@@ -179,7 +180,7 @@ class Economy:
         return result
 
     def _build_history_snapshot(self):
-        q_user = self.current_quarter - self.offset
+        q_user = self.current_quarter - getattr(self, "offset", 0)
         return {
             "inflation_rate": self.variables.get_history("inflation_rate"),
             "interest_rate": self.variables.get_history("interest_rate"),
