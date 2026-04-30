@@ -26,7 +26,7 @@ SCENARIOS = {
     "Random": None,
     "Stable Economy": None,
     "Stagflation": None,
-    "Hyperinflation": None,
+    "High Inflation": None,
     "Depression": None,
 }
 
@@ -220,10 +220,19 @@ class EconomicGameApp:
             difficulty="central_banker",
             scenario=self._sample_scenario(self.scenario_name),
         )
+        self._apply_scenario_initial_conditions()
         self.end_game_window = None
         self.current_term_start = 41 + offset
         self.news_text.delete("1.0", tk.END)
         self.economy.offset = offset
+
+    def _apply_scenario_initial_conditions(self):
+        if self.scenario_name != "High Inflation":
+            return
+        self.economy.indicators.inflation_rate = 20.0
+        self.economy.interest_rate = 6.0
+        self.economy.indicators.unemployment_rate = 3.0
+        self.economy._initialize_variables()
 
 
     def _activate_player_difficulty(self):
@@ -255,7 +264,7 @@ class EconomicGameApp:
             self.economy.cb_persona = "good"
         elif scenario_name == "Stagflation":
             self.economy.cb_persona = "dove"
-        elif scenario_name == "Hyperinflation":
+        elif scenario_name == "High Inflation":
             self.economy.cb_persona = "careless"
         elif scenario_name == "Depression":
             self.economy.cb_persona = "hawk"
@@ -264,7 +273,7 @@ class EconomicGameApp:
         if self.scenario_name == "Stable Economy" and idx >= total_turns - 10:
             self.economy.last_event_quarter = self.economy.current_quarter
 
-        if self.scenario_name == "Hyperinflation" :
+        if self.scenario_name == "High Inflation":
             if getattr(self, "_hyperinflation_prob_boosted", False):
                 return
             for event in self.economy.events:
@@ -283,9 +292,9 @@ class EconomicGameApp:
             if self.scenario_name == "Stagflation":
                 self._force_stagflation_supply_shock()
 
-       # if self.scenario_name == "Hyperinflation" and idx == total_turns - 3:
-        #    if not self._has_past_event("Spending Wave"):
-         #       self._force_event_by_name("Spending Wave")
+        if self.scenario_name == "High Inflation" and idx == total_turns - 1:
+            if not self._has_past_event("Spending Wave"):
+                self._force_event_by_name("Spending Wave")
         return result
 
     def _has_past_event(self, event_name):
@@ -781,7 +790,7 @@ class GameLauncher:
         self.frame = ttk.Frame(root, padding=16)
         self.frame.pack(fill=tk.BOTH, expand=True)
         self.difficulty = tk.StringVar(value="central_banker")
-        self.scenario = tk.StringVar(value="None")
+        self.scenario = tk.StringVar(value="Random")
         self.mandate = tk.StringVar(value="Inflation Target (future)")
         self._build()
 
