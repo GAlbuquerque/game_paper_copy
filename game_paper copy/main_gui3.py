@@ -818,11 +818,8 @@ class EconomicGameApp:
         self.save_graph_button.grid(row=0, column=2, sticky=(tk.W, tk.E), padx=2)
 
     def _compress_layout_for_post_retire(self):
-        self.news_text.configure(height=4)
+        self.news_text.configure(height=3)
         self.latest_event_label.configure(font=("Helvetica", 13, "bold"), height=2, wraplength=560)
-        self.fig.set_size_inches(6, 3.2)
-        self.fig.tight_layout()
-        self.canvas.draw()
 
     def show_event_details(self, event):
         event_window = tk.Toplevel(self.root)
