@@ -272,20 +272,20 @@ class EconomicGameApp:
                     for term in event.prob_terms:
                         if term.label == "a_base":
                             original_fn = term.fn
-                            term.fn = lambda h, _f=original_fn: min(1.0, 3 * float(_f(h)))
+                            term.fn = lambda h, _f=original_fn: min(1.0, 10 * float(_f(h)))
                             self._hyperinflation_prob_boosted = True
 
     def _apply_bootstrap_overrides_after_turn(self, idx, total_turns, result):
-        two_before_player = (total_turns - 2)
-        if idx == two_before_player:
+        three_before_player = (total_turns - 3)
+        if idx == three_before_player:
             if self.scenario_name == "Depression":
                 self._force_event_by_name("Major Financial Crisis")
             if self.scenario_name == "Stagflation":
                 self._force_stagflation_supply_shock()
 
-        if self.scenario_name == "Hyperinflation" and idx == total_turns - 1:
-            if not self._has_past_event("Spending Wave"):
-                self._force_event_by_name("Spending Wave")
+       # if self.scenario_name == "Hyperinflation" and idx == total_turns - 3:
+        #    if not self._has_past_event("Spending Wave"):
+         #       self._force_event_by_name("Spending Wave")
         return result
 
     def _has_past_event(self, event_name):
