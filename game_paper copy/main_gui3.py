@@ -8,6 +8,7 @@ Created on Sun Feb 16 13:17:54 2025
 
 from datetime import datetime
 from pathlib import Path
+from collections import defaultdict
 import ctypes
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -25,7 +26,7 @@ SCENARIOS = {
     "Random": None,
     "Stable Economy": None,
     "Stagflation": None,
-    "Hyperinflation": None,
+    "High Inflation": None,
     "Depression": None,
 }
 
@@ -219,10 +220,19 @@ class EconomicGameApp:
             difficulty="central_banker",
             scenario=self._sample_scenario(self.scenario_name),
         )
+        self._apply_scenario_initial_conditions()
         self.end_game_window = None
         self.current_term_start = 41 + offset
         self.news_text.delete("1.0", tk.END)
         self.economy.offset = offset
+
+    def _apply_scenario_initial_conditions(self):
+        if self.scenario_name != "High Inflation":
+            return
+        self.economy.indicators.inflation_rate = 20.0
+        self.economy.interest_rate = 6.0
+        self.economy.indicators.unemployment_rate = 3.0
+        self.economy._initialize_variables()
 
 
     def _activate_player_difficulty(self):
@@ -254,7 +264,7 @@ class EconomicGameApp:
             self.economy.cb_persona = "good"
         elif scenario_name == "Stagflation":
             self.economy.cb_persona = "dove"
-        elif scenario_name == "Hyperinflation":
+        elif scenario_name == "High Inflation":
             self.economy.cb_persona = "careless"
         elif scenario_name == "Depression":
             self.economy.cb_persona = "hawk"
@@ -263,7 +273,7 @@ class EconomicGameApp:
         if self.scenario_name == "Stable Economy" and idx >= total_turns - 10:
             self.economy.last_event_quarter = self.economy.current_quarter
 
-        if self.scenario_name == "Hyperinflation":
+        if self.scenario_name == "High Inflation":
             if getattr(self, "_hyperinflation_prob_boosted", False):
                 return
             for event in self.economy.events:
@@ -282,7 +292,7 @@ class EconomicGameApp:
             if self.scenario_name == "Stagflation":
                 self._force_stagflation_supply_shock()
 
-        if self.scenario_name == "Hyperinflation" and idx == total_turns - 1:
+        if self.scenario_name == "High Inflation" and idx == total_turns - 1:
             if not self._has_past_event("Spending Wave"):
                 self._force_event_by_name("Spending Wave")
         return result
@@ -291,12 +301,13 @@ class EconomicGameApp:
         return any(event_name in quarter_events for quarter_events in self.economy.past_events)
 
     def _force_stagflation_supply_shock(self):
+        history = self.economy._build_history_snapshot()
         weighted_candidates = []
         for event_name in ["Global Supply Shock", "Pandemic Outbreak", "Natural Disaster"]:
             event = next((e for e in self.economy.events if e.name == event_name), None)
             if event is None:
                 continue
-            weight = max(0.0, float(event.base_prob))
+            weight = max(0.0, float(event.get_probability(history)))
             weighted_candidates.append((event.name, weight))
 
         if not weighted_candidates:
@@ -320,7 +331,7 @@ class EconomicGameApp:
             return
         self.economy.enqueue_event(event)
         self.economy.apply_event_effects(dict(self.economy.effect_queue[0]))
-        self.economy.effect_queue[0] = {}
+        self.economy.effect_queue[0] = defaultdict(float)
         self.economy.past_events.append([event.name])
         self.economy.past_events = self.economy.past_events[-8:]
         if self.economy.current_quarter > offset:
@@ -778,8 +789,8 @@ class GameLauncher:
         self.root = root
         self.frame = ttk.Frame(root, padding=16)
         self.frame.pack(fill=tk.BOTH, expand=True)
-        self.difficulty = tk.StringVar(value="central_banker")
-        self.scenario = tk.StringVar(value="None")
+        self.difficulty = tk.StringVar(value="principles")
+        self.scenario = tk.StringVar(value="Random")
         self.mandate = tk.StringVar(value="Inflation Target (future)")
         self._build()
 
