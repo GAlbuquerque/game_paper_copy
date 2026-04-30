@@ -52,6 +52,7 @@ class EconomicGameApp:
         self.bootstrap_initial_history()
         self._configure_root_grid()
         self.root.after(100, self.print_window_size)
+        self.root.after(120, self.freeze_initial_window_geometry)
         self.configure_styles()
 
     def _configure_colors(self):
@@ -427,6 +428,12 @@ class EconomicGameApp:
             print("The window may fit well on a small screen.")
         else:
             print("The window may not fit well on the screen.")
+
+    def freeze_initial_window_geometry(self):
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        self.root.geometry(f"{width}x{height}")
 
     def create_stats_panel(self):
         ttk.Label(self.stats_frame, text="Inflation Rate:", style="Main.TLabel").grid(
