@@ -647,12 +647,14 @@ class EconomicGameApp:
                 text=f"{result['event_name']}\n    • {result['event']}"
             )
             self.current_event_name = result["event_name"]
+            self.rate_entry.delete(0, tk.END)
             return
 
         self.latest_event_label.config(text="")
         self.current_event_name = None
 
     def check_end_of_game(self):
+        self.next_button.config(state=tk.DISABLED)
         final_inflation = self.economy.indicators.inflation_rate
         final_unemployment = self.economy.indicators.unemployment_rate
 
@@ -724,6 +726,9 @@ class EconomicGameApp:
 
         self.end_game_window = tk.Toplevel(self.root)
         self.end_game_window.title("End of Game")
+        self.end_game_window.transient(self.root)
+        self.end_game_window.grab_set()
+        self.end_game_window.protocol("WM_DELETE_WINDOW", lambda: None)
 
         end_game_frame = ttk.Frame(self.end_game_window, style="Main.TFrame", padding=10)
         end_game_frame.pack(fill=tk.BOTH, expand=True)
@@ -758,11 +763,13 @@ class EconomicGameApp:
         retire_button.pack(side=tk.RIGHT, padx=20)
 
     def on_continue(self, window):
+        window.grab_release()
         window.destroy()
         self.current_term_start = self.economy.current_quarter + 1
         self.next_button.config(state=tk.NORMAL)
 
     def on_retire(self, window):
+        window.grab_release()
         window.destroy()
         self.next_button.config(state=tk.DISABLED)
         self.rate_entry.config(state=tk.DISABLED)
@@ -775,19 +782,26 @@ class EconomicGameApp:
         )
         self.end_label.grid(row=7, column=0, columnspan=3, pady=15)
 
-        self.new_game_button = ttk.Button(
+        self.play_again_button = ttk.Button(
             self.main_frame,
-            text="New Game",
+            text="Play Again (Same Settings)",
             command=self.new_game,
         )
-        self.new_game_button.grid(row=8, column=1, sticky=(tk.W, tk.E), padx=4)
+        self.play_again_button.grid(row=8, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=4)
+
+        self.main_menu_button = ttk.Button(
+            self.main_frame,
+            text="Main Menu",
+            command=self.return_to_main_menu,
+        )
+        self.main_menu_button.grid(row=8, column=2, sticky=(tk.W, tk.E), padx=4)
 
         self.save_graph_button = ttk.Button(
             self.main_frame,
             text="Save Chart",
             command=self.save_chart,
         )
-        self.save_graph_button.grid(row=8, column=2, sticky=(tk.W, tk.E), padx=4)
+        self.save_graph_button.grid(row=9, column=2, sticky=(tk.W, tk.E), padx=4, pady=(6, 0))
 
     def show_event_details(self, event):
         event_window = tk.Toplevel(self.root)
@@ -831,13 +845,19 @@ class EconomicGameApp:
         self.rate_entry.config(state=tk.NORMAL)
         if hasattr(self, "end_label"):
             self.end_label.destroy()
-        if hasattr(self, "new_game_button"):
-            self.new_game_button.destroy()
+        if hasattr(self, "play_again_button"):
+            self.play_again_button.destroy()
+        if hasattr(self, "main_menu_button"):
+            self.main_menu_button.destroy()
         if hasattr(self, "save_graph_button"):
             self.save_graph_button.destroy()
 
         self.reset_graph_panel()
         self.bootstrap_initial_history()
+
+    def return_to_main_menu(self):
+        self.main_frame.destroy()
+        GameLauncher(self.root)
 
     def save_chart(self):
         charts_dir = Path.home() / "EconGame" / "charts"
