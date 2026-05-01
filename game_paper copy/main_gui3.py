@@ -1011,6 +1011,7 @@ class GameLauncher:
             real_rate_eq_series = []
             zlb_turns = 0
             errors = 0
+            first_error = None
             total_turns_simulated = 0
             total_events_fired = 0
             selected_scenario = SCENARIOS.get(batch_scenario.get())
@@ -1046,7 +1047,7 @@ class GameLauncher:
                         econ.cb_persona = batch_persona.get()
 
                     natural_unemp_initial.append(econ.indicators.natural_unemployment_rate)
-                    interest_initial.append(econ.indicators.interest_rate)
+                    interest_initial.append(econ.interest_rate)
                     real_rate_eq_initial.append(econ.indicators.real_rate_eq)
 
                     for __ in range(turns):
@@ -1059,17 +1060,19 @@ class GameLauncher:
                         infl_series.append(econ.indicators.inflation_rate)
                         unemp_series.append(econ.indicators.unemployment_rate)
                         natural_unemp_series.append(econ.indicators.natural_unemployment_rate)
-                        interest_series.append(econ.indicators.interest_rate)
+                        interest_series.append(econ.interest_rate)
                         real_rate_eq_series.append(econ.indicators.real_rate_eq)
-                        if econ.indicators.interest_rate == 0 and econ.indicators.inflation_rate <= 0:
+                        if econ.interest_rate == 0 and econ.indicators.inflation_rate <= 0:
                             zlb_turns += 1
 
                     natural_unemp_final.append(econ.indicators.natural_unemployment_rate)
-                    interest_final.append(econ.indicators.interest_rate)
+                    interest_final.append(econ.interest_rate)
                     real_rate_eq_final.append(econ.indicators.real_rate_eq)
 
-                except Exception:
+                except Exception as exc:
                     errors += 1
+                    if first_error is None:
+                        first_error = f"{type(exc).__name__}: {exc}"
             infl = np.array(infl_series)
             unemp = np.array(unemp_series)
             natural_unemp = np.array(natural_unemp_series)
@@ -1097,6 +1100,8 @@ class GameLauncher:
                 out.insert(tk.END, f"P(unemployment < 7%): {(unemp < 7).mean():.1%}\n")
                 out.insert(tk.END, f"P(stagflation: infl>5 and unemp>8): {((infl > 5) & (unemp > 8)).mean():.1%}\n")
             out.insert(tk.END, f"Errors: {errors}\n")
+            if first_error is not None:
+                out.insert(tk.END, f"First error: {first_error}\n")
 
         ttk.Button(top, text="Run", command=run).pack(pady=(0, 10))
 
