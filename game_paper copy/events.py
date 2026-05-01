@@ -138,7 +138,7 @@ def initialize_events() -> List[GameEvent]:
                 )
             )),
     
-            # c) tail streak of rate < 1% (count), scaled 0.05 per qtr, cap at 0.03
+            # c) tail streak of rate < 1% (count), scaled 0.005 per qtr, cap at 0.03
             ProbTerm("c_low_rate_streak", lambda h: (
                 min(
                     (lambda s: (lambda idx: (len(s) if idx is None else idx))(
