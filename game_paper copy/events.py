@@ -311,7 +311,7 @@ def initialize_events() -> List[GameEvent]:
             "interest_rate":         [ 0.0, 0, 0, 0, 0, 0, 0, 0],
             "real_rate_eq":          [ 0.1, 0.2, 0, 0, -0.2, -0.1, 0, 0],
             "unemployment":          [-0.3, -0.2, 0.5, 0.5, 0.5, 0.5, 0.1, 0.1],
-            "natural_unemployment":  [ -0.3, -0.3, 0.5, 0.5, 0.3, -0.3, -0.5, -0.5],
+            "natural_unemployment":  [ -0.3, -0.3, 0.5, 0.5, 1, -0.1, -0.1, -0.1],
         },
     ))
 
@@ -357,7 +357,7 @@ def initialize_events() -> List[GameEvent]:
             "interest_rate":         [0, 0, 0, 0, 0, 0, 0, 0],
             "real_rate_eq":          [0.2, 0.2, 0.1, -0.1,-0.2 , -0.2, 0, 0],
             "unemployment":          [0.3, 0.5, 0.3, 0.1, 0, 0, 0, 0],
-            "natural_unemployment":  [1, 3, 3, 0, -1, -2, -2, -2],
+            "natural_unemployment":  [1, 3, 3, 0, -1, -1, -1, -1],
         },
     ))
     
@@ -368,7 +368,7 @@ def initialize_events() -> List[GameEvent]:
         prob_terms=[
             ProbTerm("a_base", lambda h: 0.02),
             ProbTerm("b_low_infl_high_unemp", lambda h: (
-                0.2 if (h.get("inflation_rate", [0])[-1] < 1.0 and
+                0.1 if (h.get("inflation_rate", [0])[-1] < 1.0 and
                          h.get("unemployment_rate", [0])[-1] > 10.0) else 0.0
             )),
             ProbTerm("c_recent_block",
@@ -390,7 +390,7 @@ def initialize_events() -> List[GameEvent]:
         prob_terms=[
             ProbTerm("a_base", lambda h: 0.005),
             ProbTerm("b_low_infl_high_unemp", lambda h: (
-                0.2 if (h.get("inflation_rate", [0])[-1] < 0 and
+                0.1 if (h.get("inflation_rate", [0])[-1] < 0 and
                          h.get("unemployment_rate", [0])[-1] > 12.0) else 0.0
             )),
             ProbTerm("c_recent_block",
@@ -419,7 +419,7 @@ def initialize_events() -> List[GameEvent]:
             "interest_rate":         [0, 0, 0, 0, 0, 0, 0, 0],
             "real_rate_eq":          [-1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.3],
             "unemployment":          [0.5, 0.2, 0, 0, 0, 0, 0, 0],
-            "natural_unemployment":  [0.5, -0.3, -0.2, 0, 0, 0, 0, 0],
+            "natural_unemployment":  [0.5, 0, 0, 0, 0, 0, 0, 0],
         },
     ))
     # --- Research Note: Policy Lags (Q ~42) ---

@@ -271,7 +271,7 @@ class Economy:
             self.real_interest_rates.pop(0)
 
     def _compute_natural_unemployment(self, shocks):
-        drift_correction = 0
+        drift_correction = (self.indicators.natural_unemployment_rate - 5) * (-0.02)
         return (
             self.beta1["natural_unemployment"]
             * self.indicators.natural_unemployment_rate
@@ -281,18 +281,21 @@ class Economy:
 
     def _compute_unemployment(self, new_natural_unemployment, rate_effect, shocks):
             
-        bounded_level = min(
-            max(self.indicators.unemployment_rate + rate_effect + shocks[1], 1),
-            100,
-        )
         
         new_unemployment = (
-            self.beta1["unemployment"] * bounded_level
-            + (1 - self.beta1["unemployment"]) * new_natural_unemployment
+            self.beta1["unemployment"] * new_natural_unemployment
+            + (1 - self.beta1["unemployment"]) * self.indicators.unemployment_rate
+            +rate_effect 
+            + shocks[1]
         )
+        
         if new_unemployment < self.indicators.unemployment_rate:
             decrease = self.indicators.unemployment_rate - new_unemployment
             new_unemployment = self.indicators.unemployment_rate - (0.5 * decrease)
+            
+        
+        new_unemployment = max( min (new_unemployment, 99), 1)
+
         return new_unemployment
 
     def _compute_inflation(self, eff_real_rate, gap_effect, shocks, reputation):
@@ -394,7 +397,7 @@ class Economy:
             natural_rate = self.indicators.natural_unemployment_rate
             unemployment_rate = self.indicators.unemployment_rate
             #inflation_rate = self.indicators.inflation_rate
-            gap_effect = (0.2 * natural_rate / (unemployment_rate + 1) + 0.1) * (-weighted_gap)
+            gap_effect = (0.2 * (natural_rate / (unemployment_rate + 1)) + 0.1) * (-weighted_gap)
         
         return gap_effect
 
