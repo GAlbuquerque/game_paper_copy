@@ -22,7 +22,7 @@ from economy import Economy
 
 
 offset = 10  # hidden turns
-PLAYER_START_TURN = 100
+PLAYER_START_TURN = 40
 APP_TITLE = "Policy Interest Rate Simulator"
 SCENARIOS = {
     "Random": None,
