@@ -19,6 +19,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from economy import Economy
+from endgame_logic import EndGameContext, build_end_of_term_message, mandate_text, mandate_targets
 
 
 offset = 10  # hidden turns
@@ -87,6 +88,8 @@ class EconomicGameApp:
         self.end_game_window = None
         self.graph_window_mode = "full"
         self.graph_split_mode = False
+        self.show_targets_on_graph = False
+        self.dual_unemployment_target = 5
 
     def _build_layout(self):
         self._build_main_frame()
@@ -138,7 +141,7 @@ class EconomicGameApp:
         self.mandate_frame.grid(row=3, column=0, columnspan=3, pady=5, sticky=(tk.W, tk.E))
         self.mandate_label = ttk.Label(
             self.mandate_frame,
-            text=self._format_mandate_text(),
+            text=mandate_text(self.mandate, self.dual_unemployment_target),
             style="Main.TLabel",
             justify=tk.LEFT,
             wraplength=700,
@@ -175,6 +178,14 @@ class EconomicGameApp:
             style="Main.TButton",
         )
         self.split_toggle_button.pack(side=tk.LEFT)
+
+        self.target_toggle_button = ttk.Button(
+            controls,
+            text="Targets: Off",
+            command=self.toggle_graph_targets,
+            style="Main.TButton",
+        )
+        self.target_toggle_button.pack(side=tk.LEFT, padx=(6, 0))
 
     def _build_news_section(self):
         self.news_frame = ttk.LabelFrame(
@@ -256,6 +267,8 @@ class EconomicGameApp:
         self._reset_economy_for_bootstrap()
         self._autorun_initial_history()
         self._activate_player_difficulty()
+        self._set_dual_target_from_preplayer_history()
+        self.mandate_label.config(text=mandate_text(self.mandate, self.dual_unemployment_target))
         self._sync_rate_entry_to_current_rate()
         self.update_ui()
         self.plot_graphs()
@@ -272,12 +285,22 @@ class EconomicGameApp:
         self.end_game_window = None
         self.graph_window_mode = "full"
         self.graph_split_mode = False
+        self.show_targets_on_graph = False
+        self.dual_unemployment_target = 5
         self.current_term_start = PLAYER_START_TURN + 1 + offset
         self.initial_inflation = self.economy.indicators.inflation_rate
         self.initial_unemployment = self.economy.indicators.unemployment_rate
         self.news_text.delete("1.0", tk.END)
         self.economy.offset = offset
         self.economy.player_start_turn = PLAYER_START_TURN
+
+    def _set_dual_target_from_preplayer_history(self):
+        history = self.economy.variables.get_history("unemployment_rate")
+        sample = history[-10:] if len(history) >= 10 else history
+        if len(sample) < 10:
+            self.dual_unemployment_target = 5
+            return
+        self.dual_unemployment_target = int(round(sum(sample) / len(sample)))
 
     def _apply_scenario_initial_conditions(self):
         if self.scenario_name != "High Inflation":
@@ -524,12 +547,19 @@ class EconomicGameApp:
             ax_top.set_facecolor("white")
             ax_top.plot(x, histories["inflation"], label="Inflation Rate", color=self.inflation_color)
             ax_top.plot(x, histories["interest_rate"], label="Interest Rate", linestyle="--", color=self.interest_rate_color)
+            if self.show_targets_on_graph:
+                targets = mandate_targets(self.mandate, self.dual_unemployment_target)
+                ax_top.axhline(targets["inflation"], color="darkred", linestyle=":", linewidth=1.2, label="Inflation Target")
             ax_top.set_ylabel("Percentage")
             ax_top.legend(fontsize=8)
             ax_top.grid(True, which="major", linewidth=0.8, alpha=0.4)
 
             ax_bottom.set_facecolor("white")
             ax_bottom.plot(x, histories["unemployment"], label="Unemployment Rate", color=self.unemployment_color)
+            if self.show_targets_on_graph:
+                targets = mandate_targets(self.mandate, self.dual_unemployment_target)
+                if targets["unemployment"] is not None:
+                    ax_bottom.axhline(targets["unemployment"], color="navy", linestyle=":", linewidth=1.2, label="Unemployment Target")
             if self.difficulty == "principles":
                 ax_bottom.plot(x, histories["natural_unemployment"], label="Natural Unemployment", linestyle=":", color="black")
             ax_bottom.set_xlabel("Quarter")
@@ -550,6 +580,11 @@ class EconomicGameApp:
             self.ax.plot(x, histories["inflation"], label="Inflation Rate", color=self.inflation_color)
             self.ax.plot(x, histories["unemployment"], label="Unemployment Rate", color=self.unemployment_color)
             self.ax.plot(x, histories["interest_rate"], label="Interest Rate", linestyle="--", color=self.interest_rate_color)
+            if self.show_targets_on_graph:
+                targets = mandate_targets(self.mandate, self.dual_unemployment_target)
+                self.ax.axhline(targets["inflation"], color="darkred", linestyle=":", linewidth=1.2, label="Inflation Target")
+                if targets["unemployment"] is not None:
+                    self.ax.axhline(targets["unemployment"], color="navy", linestyle=":", linewidth=1.2, label="Unemployment Target")
             if self.difficulty == "principles":
                 self.ax.plot(x, histories["natural_unemployment"], label="Natural Unemployment", linestyle=":", color="black")
             self.ax.set_xlabel("Quarter")
@@ -622,6 +657,11 @@ class EconomicGameApp:
         )
         self.plot_graphs()
 
+    def toggle_graph_targets(self):
+        self.show_targets_on_graph = not self.show_targets_on_graph
+        self.target_toggle_button.config(text="Targets: On" if self.show_targets_on_graph else "Targets: Off")
+        self.plot_graphs()
+
     def next_turn(self):
         try:
             new_rate = self._parse_rate_entry()
@@ -685,7 +725,17 @@ class EconomicGameApp:
 
     def check_end_of_game(self):
         self.next_button.config(state=tk.DISABLED)
-        message = self._build_end_of_term_message()
+        message = build_end_of_term_message(
+            EndGameContext(
+                mandate=self.mandate,
+                initial_inflation=self.initial_inflation,
+                initial_unemployment=self.initial_unemployment,
+                dual_unemployment_target=self.dual_unemployment_target,
+                inflation_history=self.economy.variables.get_history("inflation_rate"),
+                unemployment_history=self.economy.variables.get_history("unemployment_rate"),
+                current_event_name=self.current_event_name,
+            )
+        )
         self.show_end_game_message(message)
 
     # Old end-game message logic kept for future reference.
