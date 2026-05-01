@@ -1009,8 +1009,8 @@ class GameLauncher:
             real_rate_eq_initial = []
             real_rate_eq_final = []
             real_rate_eq_series = []
-            zlb_turns = 0
-            max_zlb_spells = []
+            zero_interest_turns = 0
+            max_zero_interest_spells = []
             financial_crisis_count = 0
             major_financial_crisis_count = 0
             errors = 0
@@ -1047,9 +1047,6 @@ class GameLauncher:
                                 return True
                         return False
 
-                    run_max_zlb_spell = 0
-                    current_zlb_spell = 0
-
                     for __ in range(init_turns):
                         econ.adjust_interest_rate_with_taylor()
                         result = econ.simulate_quarter()
@@ -1076,6 +1073,9 @@ class GameLauncher:
                     interest_initial.append(econ.interest_rate)
                     real_rate_eq_initial.append(econ.indicators.real_rate_eq)
 
+                    run_max_zero_interest_spell = 0
+                    current_zero_interest_spell = 0
+
                     for __ in range(turns):
                         econ.adjust_interest_rate_with_taylor()
                         result = econ.simulate_quarter()
@@ -1093,14 +1093,14 @@ class GameLauncher:
                         natural_unemp_series.append(econ.indicators.natural_unemployment_rate)
                         interest_series.append(econ.interest_rate)
                         real_rate_eq_series.append(econ.indicators.real_rate_eq)
-                        if econ.indicators.inflation_rate <= 0:
-                            zlb_turns += 1
-                            current_zlb_spell += 1
-                            run_max_zlb_spell = max(run_max_zlb_spell, current_zlb_spell)
+                        if econ.interest_rate == 0:
+                            zero_interest_turns += 1
+                            current_zero_interest_spell += 1
+                            run_max_zero_interest_spell = max(run_max_zero_interest_spell, current_zero_interest_spell)
                         else:
-                            current_zlb_spell = 0
+                            current_zero_interest_spell = 0
 
-                    max_zlb_spells.append(run_max_zlb_spell)
+                    max_zero_interest_spells.append(run_max_zero_interest_spell)
                     successful_runs += 1
 
                     natural_unemp_final.append(econ.indicators.natural_unemployment_rate)
@@ -1135,9 +1135,9 @@ class GameLauncher:
                 out.insert(tk.END, f"Interest rate (player-turn mean/median): {interest.mean():.2f} / {np.median(interest):.2f}\n")
                 out.insert(tk.END, f"real_rate_eq (initial/final mean): {np.mean(real_rate_eq_initial):.2f} / {np.mean(real_rate_eq_final):.2f}\n")
                 out.insert(tk.END, f"real_rate_eq (player-turn mean/median): {real_rate_eq.mean():.2f} / {np.median(real_rate_eq):.2f}\n")
-                out.insert(tk.END, f"Turns at inflation<=0: {zlb_turns} ({(zlb_turns / len(infl)):.1%} of player turns)\n")
+                out.insert(tk.END, f"Turns at interest=0: {zero_interest_turns} ({(zero_interest_turns / len(interest)):.1%} of player turns)\n")
                 if successful_runs > 0:
-                    out.insert(tk.END, f"Average longest negative inflation spell per run: {np.mean(max_zlb_spells):.2f} turns\n")
+                    out.insert(tk.END, f"Average longest interest=0 spell per run: {np.mean(max_zero_interest_spells):.2f} turns\n")
                 out.insert(tk.END, f"P(inflation < 3%): {(infl < 3).mean():.1%}\n")
                 out.insert(tk.END, f"P(unemployment < 7%): {(unemp < 7).mean():.1%}\n")
                 out.insert(tk.END, f"P(stagflation: infl>5 and unemp>8): {((infl > 5) & (unemp > 8)).mean():.1%}\n")

@@ -397,7 +397,10 @@ class Economy:
             natural_rate = self.indicators.natural_unemployment_rate
             unemployment_rate = self.indicators.unemployment_rate
             #inflation_rate = self.indicators.inflation_rate
-            gap_effect = (0.2 * (natural_rate / (unemployment_rate + 1)) + 0.1) * (-weighted_gap)
+            denom = unemployment_rate + 1
+            if abs(denom) < 1e-9:
+                denom = 1e-9 if denom >= 0 else -1e-9
+            gap_effect = (0.2 * (natural_rate / denom) + 0.1) * (-weighted_gap)
         
         return gap_effect
 
