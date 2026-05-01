@@ -297,7 +297,7 @@ class Economy:
 
     def _compute_inflation(self, eff_real_rate, gap_effect, shocks, reputation):
         if self.simplified_dynamics:
-            prev_real = self.real_interest_rates[-1] if self.real_interest_rates else 0.0
+            eff_real_rate = self.real_interest_rates[-1] if self.real_interest_rates else 0.0
             
         rate_effect_inflation = min(
             max((eff_real_rate - self.indicators.real_rate_eq) * (-0.1), -2),
