@@ -22,7 +22,6 @@ def mandate_text(mandate: str, dual_unemployment_target: int) -> str:
     if mandate == "dual_mandate":
         return (
             f"Dual mandate: keep inflation near 2.0% and unemployment near {dual_unemployment_target}% "
-            "(derived from the pre-term labor baseline)."
         )
     return "Inflation target mandate: keep inflation near 2.0%."
 
@@ -34,18 +33,16 @@ def classify_public_view(
 ):
     if not infl_hist:
         return "Balanced", "Economic historians call your record technocratic and disciplined."
-    hawk = sum(1 for i, u in zip(infl_hist, unemp_hist) if i > 3.0 and u < 5.0)
-    dove = sum(1 for i, u in zip(infl_hist, unemp_hist) if u > 6.0 and i < 3.0)
-    careless = sum(1 for i, u in zip(infl_hist, unemp_hist) if i > 8.0 or u > 9.0)
-    very_tight = sum(1 for r in real_rate_hist if r > 4.0)
-    very_loose = sum(1 for r in real_rate_hist if r < -1.0)
-    if careless >= 6:
-        return "Careless", "Market historians describe your approach as improvisation by turbulence."
-    if hawk + very_tight >= 15:
+    hawk = sum(1 for i, u, r in zip(infl_hist, unemp_hist, real_rate_hist) if i < 2.0 and u > 4.0 and r > 1 )
+    dove = sum(1 for i, u, r in zip(infl_hist, unemp_hist, real_rate_hist) if i > 2.0 and u < 7 and r < 0.5 )
+    careless = sum(1 for i, u, r in zip(infl_hist, unemp_hist, real_rate_hist) if i > 10.0 and r < 2)
+    if hawk  >= 8:
         return "Hawk", "Bond markets saw you as inflation-first and uncompromising."
-    if dove + very_loose >= 15:
+    if dove  >= 8 and careless < 4:
         return "Dove", "Labor groups remember you as employment-first and patient on prices."
-    return "Steady Hand", "Economic historians view you as balanced under pressure."
+    if careless >= 4:
+        return "Careless", "Newspapers decry your failed improvisation and the turbulence it generated. People wonder if you missed your Macroeconomics classes."
+    return "Balanced", "Economic historians view you as steady under pressure."
 
 
 def build_end_of_term_message(ctx: EndGameContext) -> str:
@@ -58,11 +55,11 @@ def build_end_of_term_message(ctx: EndGameContext) -> str:
     avg_infl = sum(last12_infl) / max(1, len(last12_infl))
     avg_unemp = sum(last12_unemp) / max(1, len(last12_unemp)) if t["unemployment"] is not None else None
 
-    fail_count = sum(1 for x in last12_infl if abs(x - t["inflation"]) > 1.0)
+    fail_count = sum(1 for x in last12_infl if abs(x - t["inflation"]) > 5.0)
     if t["unemployment"] is not None:
-        fail_count += sum(1 for x in last12_unemp if abs(x - t["unemployment"]) > 1.5)
+        fail_count += sum(1 for x in last12_unemp if x - t["unemployment"]) > 5
 
-    success = abs(avg_infl - t["inflation"]) <= 0.6
+    success = abs(avg_infl - t["inflation"]) <= 1
     if t["unemployment"] is not None:
         success = success and abs(avg_unemp - t["unemployment"]) <= 1.0
     if fail_count >= 3:
@@ -86,18 +83,17 @@ def build_end_of_term_message(ctx: EndGameContext) -> str:
     event_ref = ctx.current_event_name or "a volatile policy cycle"
 
     if success:
-        target_msg = "Full success: your mandate targets were met on average."
-        lesson = "In the future, keep policy rates firmly above inflation when demand overheats."
+        target_msg = "Your mandate targets were met on average."
+        lesson = "We will miss you!"
     elif mixed:
-        target_msg = "Mixed result: the targets were missed, but the trend improved materially."
+        target_msg = "The targets were missed, but the trend improved materially."
         lesson = "In the future, react earlier—small, timely moves are usually cheaper than late shocks."
     else:
-        target_msg = "Failure: the mandate was not achieved with enough consistency."
-        lesson = "In the future, align rates with both inflation pressure and labor slack, not headlines."
+        target_msg = "You did not achieve your targets."
+        lesson = "In the future, be sure to increase interest rates to fight inflation and decrease them when fighting unemployment."
 
-    humor = " (Your memes may outperform your macro model.)" if label == "Careless" else ""
     return (
-        f"Your term has ended. You navigated {event_ref}. Based on your behavior, {reput} "
-        f"They classify you as: {label}.{humor}\n\n"
+        f"Your term has ended. You navigated {event_ref}. {reput} "
+        f"They classify you as: {label}\n\n"
         f"{target_msg} {lesson}"
     )
