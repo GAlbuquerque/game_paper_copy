@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Streamlit web UI for the Policy Interest Rate Simulator."""
 
+import io
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -81,6 +83,7 @@ def _new_game(difficulty: str, scenario_name: str, mandate: str) -> None:
     st.session_state.game_over = False
     st.session_state.player_turn = 1
     st.session_state.in_term_quarter = 1
+    st.session_state.term_start_idx = max(0, PLAYER_START_TURN + OFFSET)
     st.session_state.initial_inflation = econ.indicators.inflation_rate
     st.session_state.initial_unemployment = econ.indicators.unemployment_rate
     st.session_state.difficulty = difficulty
@@ -305,12 +308,19 @@ def main() -> None:
         c3.markdown(f"**Interest Rate:** {state['interest_rate']:.2f}%")
 
         st.markdown("### Economic Graphs")
-        g1, g2, g3 = st.columns(3)
+        g1, g2, g3, g4 = st.columns(4)
         st.session_state.graph_window_mode = "past20" if g1.toggle("Past 20 turns", value=(st.session_state.graph_window_mode == "past20")) else "full"
         st.session_state.graph_split_mode = g2.toggle("Split charts", value=st.session_state.graph_split_mode)
         st.session_state.show_targets_on_graph = g3.toggle("Show targets", value=st.session_state.show_targets_on_graph)
 
         chart = _plot_histories(econ, st.session_state.graph_window_mode, st.session_state.graph_split_mode, st.session_state.show_targets_on_graph, st.session_state.mandate, st.session_state.dual_unemployment_target, st.session_state.latest_fired)
+        with g4:
+            try:
+                chart_png = _chart_png_bytes(chart)
+                st.download_button("Download graph (PNG)", data=chart_png, file_name="economic_graph.png", mime="image/png", width="stretch")
+            except Exception:
+                chart_html = chart.to_html().encode("utf-8")
+                st.download_button("Download graph (HTML)", data=chart_html, file_name="economic_graph.html", mime="text/html", width="stretch")
         st.altair_chart(chart, width="stretch")
 
         st.markdown("##### New Interest Rate")
