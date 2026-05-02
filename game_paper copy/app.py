@@ -85,8 +85,7 @@ def _new_game(difficulty: str, scenario_name: str, mandate: str) -> None:
         result = econ.simulate_quarter()
         _apply_bootstrap_overrides_after_turn(econ, scenario_name, idx, total_turns)
         if result.get("event_name") and econ.current_quarter > OFFSET:
-            user_q = max(1, econ.current_quarter - OFFSET)
-            news_log.append(f"Q{user_q}: {result['event_name']}")
+            news_log.append(f"Quarter {econ.current_quarter}: {result['event_name']}")
 
     _activate_player_difficulty(econ, difficulty)
 
@@ -147,7 +146,7 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
     rate = interest_rate_history[start_idx:]
 
     if split_mode:
-        fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+        fig, axes = plt.subplots(2, 1, figsize=(10, 5.2), sharex=True)
         axes[0].plot(x, infl, color="red", label="Inflation")
         axes[0].plot(x, rate, color="green", linestyle="--", label="Interest Rate")
         axes[1].plot(x, unemp, color="blue", label="Unemployment")
@@ -169,7 +168,7 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
             if t["unemployment"] is not None:
                 axes[1].axhline(t["unemployment"], color="blue", linestyle=':', alpha=0.6)
     else:
-        fig, ax = plt.subplots(figsize=(10, 4.5))
+        fig, ax = plt.subplots(figsize=(10, 4.2))
         ax.plot(x, infl, label="Inflation", color="red")
         ax.plot(x, unemp, label="Unemployment", color="blue")
         ax.plot(x, rate, label="Interest Rate", color="green", linestyle="--")
@@ -234,7 +233,7 @@ def _next_quarter(user_rate: float) -> None:
     result = econ.simulate_quarter()
 
     if result.get("event_name"):
-        st.session_state.news_log.append(f"Q{st.session_state.player_turn}: {result['event_name']}")
+        st.session_state.news_log.append(f"Quarter {econ.current_quarter}: {result['event_name']}")
         st.session_state.news_log = st.session_state.news_log[-25:]
         st.session_state.current_event_name = result["event_name"]
         st.session_state.last_event_detail = result.get("event") or ""
@@ -277,8 +276,129 @@ def _render_end_dialog() -> None:
 def _render_start_page() -> None:
     st.title(APP_TITLE)
     st.subheader("Start Menu")
-    difficulty = st.selectbox("Difficulty", ["principles", "senior", "central_banker"], index=2, key="start_difficulty")
-    scenario_name = st.selectbox("Scenario", SCENARIOS, index=0, key="start_scenario")
+    difficulty = st.radio("Difficulty", ["principles", "senior", "central_banker"], index=2, key="start_difficulty")
+    scenario_name = st.radio("Scenario", SCENARIOS, index=0, key="start_scenario")
+    mandate_label = st.radio("Mandate", list(MANDATES.keys()), index=0, key="start_mandate")
+    if st.button("Start Game", type="primary"):
+        _new_game(difficulty, scenario_name, MANDATES[mandate_label])
+        st.rerun()
+
+
+def main() -> None:
+    st.set_page_config(page_title=APP_TITLE, layout="wide")
+    st.title(APP_TITLE)
+
+    if "game_started" not in st.session_state:
+        st.session_state.game_started = False
+
+    if not st.session_state.game_started:
+        _render_start_page()
+        return
+
+    if "economy" not in st.session_state:
+        _new_game("central_banker", "Random", "inflation_target")
+
+    _render_end_dialog()
+
+    with st.expander("New game controls", expanded=False):
+        cng1, cng2, cng3, cng4 = st.columns([1,1,1,1])
+        difficulty = cng1.radio("Difficulty", ["principles", "senior", "central_banker"], index=2, horizontal=False)
+        scenario_name = cng2.radio("Scenario", SCENARIOS, index=0, horizontal=False)
+        mandate_label = cng3.radio("Mandate", list(MANDATES.keys()), index=0, horizontal=False)
+        if cng4.button("Back to Start Menu", use_container_width=True):
+            st.session_state.game_started = False
+            st.rerun()
+        if cng4.button("Start New Game", use_container_width=True):
+            _new_game(difficulty, scenario_name, MANDATES[mandate_label])
+            st.rerun()
+
+    econ = st.session_state.economy
+    term_start_idx = max(0, PLAYER_START_TURN + OFFSET)
+    term_end_idx = term_start_idx + TERM_LENGTH
+
+    infl_term = econ.variables.get_history("inflation_rate")[term_start_idx:term_end_idx]
+    unemp_term = econ.variables.get_history("unemployment_rate")[term_start_idx:term_end_idx]
+    real_term = econ.variables.get_history("real_interest_rate")[term_start_idx:term_end_idx]
+
+    message = build_end_of_term_message(
+        EndGameContext(
+            mandate=st.session_state.mandate,
+            initial_inflation=st.session_state.initial_inflation,
+            initial_unemployment=st.session_state.initial_unemployment,
+            dual_unemployment_target=st.session_state.dual_unemployment_target,
+            inflation_history=infl_term,
+            unemployment_history=unemp_term,
+            real_interest_rate_history=real_term,
+            current_event_name=st.session_state.current_event_name,
+        )
+    )
+    st.session_state.end_message = message
+
+    targets = mandate_targets(st.session_state.mandate, st.session_state.dual_unemployment_target)
+    avg_infl = sum(infl_term) / max(1, len(infl_term))
+    avg_unemp = sum(unemp_term) / max(1, len(unemp_term))
+    st.session_state.end_summary = {
+        "avg_inflation": avg_infl,
+        "avg_unemployment": avg_unemp,
+        "inflation_target": targets["inflation"],
+        "unemployment_target": targets["unemployment"],
+        "inflation_hit": abs(avg_infl - targets["inflation"]) <= 1.0,
+        "unemployment_hit": (targets["unemployment"] is None) or (abs(avg_unemp - targets["unemployment"]) <= 1.0),
+    }
+    st.session_state.show_end_dialog = True
+
+
+def _next_quarter(user_rate: float) -> None:
+    econ = st.session_state.economy
+    econ.adjust_interest_rate(float(user_rate))
+    result = econ.simulate_quarter()
+
+    if result.get("event_name"):
+        st.session_state.news_log.append(f"Quarter {econ.current_quarter}: {result['event_name']}")
+        st.session_state.news_log = st.session_state.news_log[-25:]
+        st.session_state.current_event_name = result["event_name"]
+        st.session_state.last_event_detail = result.get("event") or ""
+    else:
+        st.session_state.current_event_name = None
+        st.session_state.last_event_detail = ""
+
+    st.session_state.player_turn += 1
+    _finish_game_if_needed()
+
+
+
+
+def _figure_png_bytes(fig) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=180, bbox_inches="tight")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def _render_end_dialog() -> None:
+    if not st.session_state.get("show_end_dialog", False):
+        return
+
+    @st.dialog("End of Game")
+    def _dlg():
+        st.write(st.session_state.end_message)
+        c1, c2 = st.columns(2)
+        if c1.button("Continue Playing", use_container_width=True):
+            st.session_state.game_over = False
+            st.session_state.show_end_dialog = False
+            st.rerun()
+        if c2.button("Retire", use_container_width=True):
+            st.session_state.show_end_dialog = False
+            st.rerun()
+
+    _dlg()
+
+
+def _render_start_page() -> None:
+    st.title(APP_TITLE)
+    st.subheader("Start Menu")
+    difficulty = st.radio("Difficulty", ["principles", "senior", "central_banker"], index=2, key="start_difficulty")
+    scenario_name = st.radio("Scenario", SCENARIOS, index=0, key="start_scenario")
     mandate_label = st.radio("Mandate", list(MANDATES.keys()), index=0, key="start_mandate")
     if st.button("Start Game", type="primary"):
         _new_game(difficulty, scenario_name, MANDATES[mandate_label])
@@ -327,15 +447,13 @@ def main() -> None:
     )
 
     st.markdown("### Economic Indicators")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Quarter", min(st.session_state.player_turn, TERM_LENGTH))
-    c2.metric("Inflation", f"{state['inflation_rate']:.2f}%")
-    c3.metric("Unemployment", f"{state['unemployment_rate']:.2f}%")
-    c4.metric("Interest Rate", f"{state['interest_rate']:.2f}%")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Inflation", f"{state['inflation_rate']:.2f}%")
+    c2.metric("Unemployment", f"{state['unemployment_rate']:.2f}%")
+    c3.metric("Interest Rate", f"{state['interest_rate']:.2f}%")
 
     st.markdown("### Economic Graphs")
-    left, right = st.columns([2, 1])
-    with left:
+    with st.container():
         st.subheader("Economic trends")
         g1, g2, g3 = st.columns(3)
         st.session_state.graph_window_mode = g1.selectbox("History", ["full", "past20"], index=0 if st.session_state.graph_window_mode=="full" else 1)
@@ -353,63 +471,62 @@ def main() -> None:
         st.pyplot(fig, clear_figure=True)
         st.download_button("Download graph (PNG)", data=_figure_png_bytes(fig), file_name="pirs_graph.png", mime="image/png")
 
-    with right:
-        st.subheader("Policy action")
-        if "rate_text" not in st.session_state:
-            st.session_state.rate_text = f"{state['interest_rate']:.2f}"
+    st.markdown("### Policy action")
+    if "rate_text" not in st.session_state:
+        st.session_state.rate_text = f"{state['interest_rate']:.2f}"
 
-        with st.form("policy_form", clear_on_submit=False):
-            user_rate_text = st.text_input("Set next-quarter interest rate (%)", value=st.session_state.rate_text)
-            parsed_rate = None
-            try:
-                parsed_rate = float(user_rate_text)
-            except ValueError:
-                pass
+    with st.form("policy_form", clear_on_submit=False):
+        user_rate_text = st.text_input("Enter New Interest Rate", value=st.session_state.rate_text)
+        parsed_rate = None
+        try:
+            parsed_rate = float(user_rate_text)
+        except ValueError:
+            pass
 
-            needs_confirm = False
-            if parsed_rate is not None:
-                needs_confirm = _rate_change_requires_confirmation(econ, parsed_rate)
-            if needs_confirm:
-                st.warning("This is a very large increase relative to current conditions.")
-                confirm_large_jump = st.checkbox("I confirm this large rate increase")
+        needs_confirm = False
+        if parsed_rate is not None:
+            needs_confirm = _rate_change_requires_confirmation(econ, parsed_rate)
+        if needs_confirm:
+            st.warning("This is a very large increase relative to current conditions.")
+            confirm_large_jump = st.checkbox("I confirm this large rate increase")
+        else:
+            confirm_large_jump = True
+
+        submitted = st.form_submit_button("Next", type="primary", use_container_width=True, disabled=st.session_state.game_over)
+
+    if submitted:
+        st.session_state.rate_text = user_rate_text
+        try:
+            user_rate = float(user_rate_text)
+        except ValueError:
+            st.error("Please enter a valid number for the interest rate.")
+            user_rate = None
+
+        if user_rate is not None:
+            ok, msg = _validate_rate_input(user_rate)
+            if not ok:
+                st.error(msg)
+            elif _rate_change_requires_confirmation(econ, user_rate) and not confirm_large_jump:
+                st.error("Please confirm the large rate increase before proceeding.")
             else:
-                confirm_large_jump = True
+                _next_quarter(user_rate)
+                st.session_state.rate_text = f"{st.session_state.economy.interest_rate:.2f}"
+                st.rerun()
 
-            submitted = st.form_submit_button("Next Quarter", type="primary", use_container_width=True, disabled=st.session_state.game_over)
+    st.markdown("### Latest event")
+    if st.session_state.current_event_name:
+        st.write(f"**{st.session_state.current_event_name}**")
+        if st.session_state.last_event_detail:
+            st.caption(st.session_state.last_event_detail)
+    else:
+        st.write("No major event this quarter.")
 
-        if submitted:
-            st.session_state.rate_text = user_rate_text
-            try:
-                user_rate = float(user_rate_text)
-            except ValueError:
-                st.error("Please enter a valid number for the interest rate.")
-                user_rate = None
-
-            if user_rate is not None:
-                ok, msg = _validate_rate_input(user_rate)
-                if not ok:
-                    st.error(msg)
-                elif _rate_change_requires_confirmation(econ, user_rate) and not confirm_large_jump:
-                    st.error("Please confirm the large rate increase before proceeding.")
-                else:
-                    _next_quarter(user_rate)
-                    st.session_state.rate_text = f"{st.session_state.economy.interest_rate:.2f}"
-                    st.rerun()
-
-        st.subheader("Latest event")
-        if st.session_state.current_event_name:
-            st.write(f"**{st.session_state.current_event_name}**")
-            if st.session_state.last_event_detail:
-                st.caption(st.session_state.last_event_detail)
-        else:
-            st.write("No major event this quarter.")
-
-        st.subheader("News feed")
-        if st.session_state.news_log:
-            for item in reversed(st.session_state.news_log[-10:]):
-                st.write(f"- {item}")
-        else:
-            st.write("No events yet.")
+    st.markdown("### News Feed")
+    if st.session_state.news_log:
+        for item in st.session_state.news_log[-12:]:
+            st.write(f"- {item}")
+    else:
+        st.write("No events yet.")
 
     if st.session_state.game_over:
         st.success("Term complete")
