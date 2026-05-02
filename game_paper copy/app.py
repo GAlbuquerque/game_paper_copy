@@ -146,7 +146,7 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
     rate = interest_rate_history[start_idx:]
 
     if split_mode:
-        fig, axes = plt.subplots(2, 1, figsize=(8, 4), dpi=80, sharex=True)
+        fig, axes = plt.subplots(2, 1, figsize=(12, 4), dpi=80, sharex=True)
         axes[0].plot(x, infl, color="red", label="Inflation")
         axes[0].plot(x, rate, color="green", linestyle="--", label="Interest Rate")
         axes[1].plot(x, unemp, color="blue", label="Unemployment")
@@ -168,7 +168,7 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
             if t["unemployment"] is not None:
                 axes[1].axhline(t["unemployment"], color="blue", linestyle=':', alpha=0.6)
     else:
-        fig, ax = plt.subplots(figsize=(8, 4), dpi=80)
+        fig, ax = plt.subplots(figsize=(12, 4), dpi=80)
         ax.plot(x, infl, label="Inflation", color="red")
         ax.plot(x, unemp, label="Unemployment", color="blue")
         ax.plot(x, rate, label="Interest Rate", color="green", linestyle="--")
@@ -484,7 +484,7 @@ def main() -> None:
     with right_col:
         st.markdown("### Latest event")
         if st.session_state.current_event_name:
-            st.write(f"**{st.session_state.current_event_name}**")
+            st.write(f"{st.session_state.current_event_name}")
             if st.session_state.last_event_detail:
                 st.caption(st.session_state.last_event_detail)
         else:
@@ -493,7 +493,7 @@ def main() -> None:
         st.markdown("### News Feed")
         if st.session_state.news_log:
             for item in st.session_state.news_log[-5:]:
-                st.write(f"- {item}")
+                st.write(f"**- {item}**")
         else:
             st.write("No events yet.")
 
