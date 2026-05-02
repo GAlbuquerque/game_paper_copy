@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from economy import Economy
-from endgame_logic import EndGameContext, build_end_of_term_message, mandate_text
+from endgame_logic import EndGameContext, build_end_of_term_message, mandate_text, mandate_targets
 
 APP_TITLE = "Policy Interest Rate Simulator"
 PLAYER_START_TURN = 40
@@ -106,6 +106,9 @@ def _new_game(difficulty: str, scenario_name: str, mandate: str) -> None:
     st.session_state.dual_unemployment_target = dual_target
     st.session_state.last_event_detail = ""
     st.session_state.end_message = ""
+    st.session_state.graph_window_mode = "full"
+    st.session_state.graph_split_mode = False
+    st.session_state.show_targets_on_graph = False
 
 
 def _state_dict(econ: Economy) -> dict:
@@ -124,20 +127,54 @@ def _validate_rate_input(new_rate: float) -> tuple[bool, str]:
     return True, ""
 
 
-def _plot_histories(econ: Economy):
+def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targets: bool, mandate: str, dual_unemployment_target: int):
     inflation_history = econ.variables.get_history("inflation_rate")
     unemployment_history = econ.variables.get_history("unemployment_rate")
     interest_rate_history = econ.variables.get_history("interest_rate")
 
-    fig, ax = plt.subplots(figsize=(10, 4.5))
-    ax.plot(inflation_history, label="Inflation", color="red")
-    ax.plot(unemployment_history, label="Unemployment", color="blue")
-    ax.plot(interest_rate_history, label="Interest Rate", color="green", linestyle="--")
-    ax.axvline(x=PLAYER_START_TURN + OFFSET, color="black", linestyle=":", label="Player start")
-    ax.set_xlabel("Quarter")
-    ax.set_ylabel("Percent")
-    ax.legend(loc="best")
-    ax.grid(alpha=0.2)
+    if window_mode == "term":
+        start_idx = max(0, PLAYER_START_TURN + OFFSET)
+    else:
+        start_idx = 0
+
+    x = list(range(start_idx, len(inflation_history)))
+    infl = inflation_history[start_idx:]
+    unemp = unemployment_history[start_idx:]
+    rate = interest_rate_history[start_idx:]
+
+    if split_mode:
+        fig, axes = plt.subplots(3, 1, figsize=(10, 7), sharex=True)
+        axes[0].plot(x, infl, color="red", label="Inflation")
+        axes[1].plot(x, unemp, color="blue", label="Unemployment")
+        axes[2].plot(x, rate, color="green", linestyle="--", label="Interest Rate")
+        for ax in axes:
+            ax.axvline(x=PLAYER_START_TURN + OFFSET, color="black", linestyle=":")
+            ax.grid(alpha=0.2)
+            ax.legend(loc="best")
+        axes[2].set_xlabel("Quarter")
+        axes[0].set_ylabel("Percent")
+        axes[1].set_ylabel("Percent")
+        axes[2].set_ylabel("Percent")
+        if show_targets:
+            t = mandate_targets(mandate, dual_unemployment_target)
+            axes[0].axhline(t["inflation"], color="red", linestyle=':', alpha=0.6)
+            if t["unemployment"] is not None:
+                axes[1].axhline(t["unemployment"], color="blue", linestyle=':', alpha=0.6)
+    else:
+        fig, ax = plt.subplots(figsize=(10, 4.5))
+        ax.plot(x, infl, label="Inflation", color="red")
+        ax.plot(x, unemp, label="Unemployment", color="blue")
+        ax.plot(x, rate, label="Interest Rate", color="green", linestyle="--")
+        ax.axvline(x=PLAYER_START_TURN + OFFSET, color="black", linestyle=":", label="Player start")
+        ax.set_xlabel("Quarter")
+        ax.set_ylabel("Percent")
+        ax.legend(loc="best")
+        ax.grid(alpha=0.2)
+        if show_targets:
+            t = mandate_targets(mandate, dual_unemployment_target)
+            ax.axhline(t["inflation"], color="red", linestyle=':', alpha=0.6, label="Inflation target")
+            if t["unemployment"] is not None:
+                ax.axhline(t["unemployment"], color="blue", linestyle=':', alpha=0.6, label="Unemployment target")
     fig.tight_layout()
     return fig
 
@@ -219,7 +256,19 @@ def main() -> None:
     left, right = st.columns([2, 1])
     with left:
         st.subheader("Economic trends")
-        st.pyplot(_plot_histories(econ), clear_figure=True)
+        g1, g2, g3 = st.columns(3)
+        st.session_state.graph_window_mode = g1.selectbox("History", ["full", "term"], index=0 if st.session_state.graph_window_mode=="full" else 1)
+        st.session_state.graph_split_mode = g2.toggle("Split charts", value=st.session_state.graph_split_mode)
+        st.session_state.show_targets_on_graph = g3.toggle("Show targets", value=st.session_state.show_targets_on_graph)
+
+        st.pyplot(_plot_histories(
+            econ,
+            st.session_state.graph_window_mode,
+            st.session_state.graph_split_mode,
+            st.session_state.show_targets_on_graph,
+            st.session_state.mandate,
+            st.session_state.dual_unemployment_target,
+        ), clear_figure=True)
 
     with right:
         st.subheader("Policy action")
