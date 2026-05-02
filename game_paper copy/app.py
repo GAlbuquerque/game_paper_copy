@@ -132,8 +132,8 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
     unemployment_history = econ.variables.get_history("unemployment_rate")
     interest_rate_history = econ.variables.get_history("interest_rate")
 
-    if window_mode == "term":
-        start_idx = max(0, PLAYER_START_TURN + OFFSET)
+    if window_mode == "past20":
+        start_idx = max(0, len(inflation_history) - 20)
     else:
         start_idx = 0
 
@@ -143,18 +143,22 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
     rate = interest_rate_history[start_idx:]
 
     if split_mode:
-        fig, axes = plt.subplots(3, 1, figsize=(10, 7), sharex=True)
+        fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
         axes[0].plot(x, infl, color="red", label="Inflation")
+        axes[0].plot(x, rate, color="green", linestyle="--", label="Interest Rate")
         axes[1].plot(x, unemp, color="blue", label="Unemployment")
-        axes[2].plot(x, rate, color="green", linestyle="--", label="Interest Rate")
+        natural = econ.variables.get_history("natural_unemployment_rate")[start_idx:]
+        if econ.difficulty == "principles":
+            axes[1].plot(x, natural, color="black", linestyle=":", label="Natural unemployment")
+
         for ax in axes:
             ax.axvline(x=PLAYER_START_TURN + OFFSET, color="black", linestyle=":")
             ax.grid(alpha=0.2)
             ax.legend(loc="best")
-        axes[2].set_xlabel("Quarter")
+
+        axes[1].set_xlabel("Quarter")
         axes[0].set_ylabel("Percent")
         axes[1].set_ylabel("Percent")
-        axes[2].set_ylabel("Percent")
         if show_targets:
             t = mandate_targets(mandate, dual_unemployment_target)
             axes[0].axhline(t["inflation"], color="red", linestyle=':', alpha=0.6)
@@ -257,7 +261,7 @@ def main() -> None:
     with left:
         st.subheader("Economic trends")
         g1, g2, g3 = st.columns(3)
-        st.session_state.graph_window_mode = g1.selectbox("History", ["full", "term"], index=0 if st.session_state.graph_window_mode=="full" else 1)
+        st.session_state.graph_window_mode = g1.selectbox("History", ["full", "past20"], index=0 if st.session_state.graph_window_mode=="full" else 1)
         st.session_state.graph_split_mode = g2.toggle("Split charts", value=st.session_state.graph_split_mode)
         st.session_state.show_targets_on_graph = g3.toggle("Show targets", value=st.session_state.show_targets_on_graph)
 
@@ -272,31 +276,46 @@ def main() -> None:
 
     with right:
         st.subheader("Policy action")
-        max_rate = max(30.0, state["interest_rate"] + 10)
-        user_rate = st.number_input(
-            "Set next-quarter interest rate (%)",
-            min_value=0.0,
-            max_value=max_rate,
-            value=float(state["interest_rate"]),
-            step=0.25,
-        )
+        if "rate_text" not in st.session_state:
+            st.session_state.rate_text = f"{state['interest_rate']:.2f}"
 
-        needs_confirm = _rate_change_requires_confirmation(econ, float(user_rate))
-        if needs_confirm:
-            st.warning("This is a very large increase relative to current conditions.")
-            confirm_large_jump = st.checkbox("I confirm this large rate increase")
-        else:
-            confirm_large_jump = True
+        with st.form("policy_form", clear_on_submit=False):
+            user_rate_text = st.text_input("Set next-quarter interest rate (%)", value=st.session_state.rate_text)
+            parsed_rate = None
+            try:
+                parsed_rate = float(user_rate_text)
+            except ValueError:
+                pass
 
-        if st.button("Next Quarter", type="primary", use_container_width=True, disabled=st.session_state.game_over):
-            ok, msg = _validate_rate_input(float(user_rate))
-            if not ok:
-                st.error(msg)
-            elif needs_confirm and not confirm_large_jump:
-                st.error("Please confirm the large rate increase before proceeding.")
+            needs_confirm = False
+            if parsed_rate is not None:
+                needs_confirm = _rate_change_requires_confirmation(econ, parsed_rate)
+            if needs_confirm:
+                st.warning("This is a very large increase relative to current conditions.")
+                confirm_large_jump = st.checkbox("I confirm this large rate increase")
             else:
-                _next_quarter(user_rate)
-                st.rerun()
+                confirm_large_jump = True
+
+            submitted = st.form_submit_button("Next Quarter", type="primary", use_container_width=True, disabled=st.session_state.game_over)
+
+        if submitted:
+            st.session_state.rate_text = user_rate_text
+            try:
+                user_rate = float(user_rate_text)
+            except ValueError:
+                st.error("Please enter a valid number for the interest rate.")
+                user_rate = None
+
+            if user_rate is not None:
+                ok, msg = _validate_rate_input(user_rate)
+                if not ok:
+                    st.error(msg)
+                elif _rate_change_requires_confirmation(econ, user_rate) and not confirm_large_jump:
+                    st.error("Please confirm the large rate increase before proceeding.")
+                else:
+                    _next_quarter(user_rate)
+                    st.session_state.rate_text = f"{st.session_state.economy.interest_rate:.2f}"
+                    st.rerun()
 
         st.subheader("Latest event")
         if st.session_state.current_event_name:
