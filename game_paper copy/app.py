@@ -442,18 +442,28 @@ def main() -> None:
     c2.markdown(f"**Unemployment Rate:** {state['unemployment_rate']:.2f}%")
     c3.markdown(f"**Interest Rate:** {state['interest_rate']:.2f}%")
 
-    st.markdown("### Mandate")
-    st.caption(
-        mandate_text(
-            st.session_state.mandate,
-            st.session_state.dual_unemployment_target,
-        )
-    )
+    if st.session_state.game_over:
+        st.success("Term complete")
+        st.write(st.session_state.end_message)
+        if st.session_state.end_summary:
+            ssum = st.session_state.end_summary
+            st.markdown("### End-of-term scorecard")
+            c1, c2 = st.columns(2)
+            c1.metric("Avg inflation (term)", f"{ssum['avg_inflation']:.2f}%")
+            c2.metric("Inflation target", f"{ssum['inflation_target']:.2f}%")
+            if ssum["unemployment_target"] is not None:
+                c3, c4 = st.columns(2)
+                c3.metric("Avg unemployment (term)", f"{ssum['avg_unemployment']:.2f}%")
+                c4.metric("Unemployment target", f"{ssum['unemployment_target']:.2f}%")
 
+            st.write(f"Inflation objective: {'met' if ssum['inflation_hit'] else 'missed'}")
+            if ssum["unemployment_target"] is not None:
+                st.write(f"Unemployment objective: {'met' if ssum['unemployment_hit'] else 'missed'}")
+                
     st.markdown("### Economic Graphs")
     left_col, right_col = st.columns([2.1, 1.1])
     with left_col:
-        st.subheader("Economic trends")
+        #st.subheader("Economic trends")
         g1, g2, g3 = st.columns(3)
         past20 = g1.toggle("Past 20 turns", value=(st.session_state.graph_window_mode == "past20"))
         st.session_state.graph_window_mode = "past20" if past20 else "full"
@@ -529,38 +539,8 @@ def main() -> None:
                 st.session_state.rate_text = f"{st.session_state.economy.interest_rate:.2f}"
                 st.rerun()
 
-    st.markdown("### Latest event")
-    if st.session_state.current_event_name:
-        st.write(f"**{st.session_state.current_event_name}**")
-        if st.session_state.last_event_detail:
-            st.caption(st.session_state.last_event_detail)
-    else:
-        st.write("No major event this quarter.")
 
-    st.markdown("### News Feed")
-    if st.session_state.news_log:
-        for item in st.session_state.news_log[-12:]:
-            st.write(f"- {item}")
-    else:
-        st.write("No events yet.")
 
-    if st.session_state.game_over:
-        st.success("Term complete")
-        st.write(st.session_state.end_message)
-        if st.session_state.end_summary:
-            ssum = st.session_state.end_summary
-            st.markdown("### End-of-term scorecard")
-            c1, c2 = st.columns(2)
-            c1.metric("Avg inflation (term)", f"{ssum['avg_inflation']:.2f}%")
-            c2.metric("Inflation target", f"{ssum['inflation_target']:.2f}%")
-            if ssum["unemployment_target"] is not None:
-                c3, c4 = st.columns(2)
-                c3.metric("Avg unemployment (term)", f"{ssum['avg_unemployment']:.2f}%")
-                c4.metric("Unemployment target", f"{ssum['unemployment_target']:.2f}%")
-
-            st.write(f"Inflation objective: {'met' if ssum['inflation_hit'] else 'missed'}")
-            if ssum["unemployment_target"] is not None:
-                st.write(f"Unemployment objective: {'met' if ssum['unemployment_hit'] else 'missed'}")
 
 
 if __name__ == "__main__":
