@@ -109,6 +109,7 @@ def _new_game(difficulty: str, scenario_name: str, mandate: str) -> None:
     st.session_state.graph_window_mode = "full"
     st.session_state.graph_split_mode = False
     st.session_state.show_targets_on_graph = False
+    st.session_state.end_summary = None
 
 
 def _state_dict(econ: Economy) -> dict:
@@ -192,19 +193,35 @@ def _finish_game_if_needed() -> None:
     term_start_idx = max(0, PLAYER_START_TURN + OFFSET)
     term_end_idx = term_start_idx + TERM_LENGTH
 
+    infl_term = econ.variables.get_history("inflation_rate")[term_start_idx:term_end_idx]
+    unemp_term = econ.variables.get_history("unemployment_rate")[term_start_idx:term_end_idx]
+    real_term = econ.variables.get_history("real_interest_rate")[term_start_idx:term_end_idx]
+
     message = build_end_of_term_message(
         EndGameContext(
             mandate=st.session_state.mandate,
             initial_inflation=st.session_state.initial_inflation,
             initial_unemployment=st.session_state.initial_unemployment,
             dual_unemployment_target=st.session_state.dual_unemployment_target,
-            inflation_history=econ.variables.get_history("inflation_rate")[term_start_idx:term_end_idx],
-            unemployment_history=econ.variables.get_history("unemployment_rate")[term_start_idx:term_end_idx],
-            real_interest_rate_history=econ.variables.get_history("real_interest_rate")[term_start_idx:term_end_idx],
+            inflation_history=infl_term,
+            unemployment_history=unemp_term,
+            real_interest_rate_history=real_term,
             current_event_name=st.session_state.current_event_name,
         )
     )
     st.session_state.end_message = message
+
+    targets = mandate_targets(st.session_state.mandate, st.session_state.dual_unemployment_target)
+    avg_infl = sum(infl_term) / max(1, len(infl_term))
+    avg_unemp = sum(unemp_term) / max(1, len(unemp_term))
+    st.session_state.end_summary = {
+        "avg_inflation": avg_infl,
+        "avg_unemployment": avg_unemp,
+        "inflation_target": targets["inflation"],
+        "unemployment_target": targets["unemployment"],
+        "inflation_hit": abs(avg_infl - targets["inflation"]) <= 1.0,
+        "unemployment_hit": (targets["unemployment"] is None) or (abs(avg_unemp - targets["unemployment"]) <= 1.0),
+    }
 
 
 def _next_quarter(user_rate: float) -> None:
@@ -335,6 +352,20 @@ def main() -> None:
     if st.session_state.game_over:
         st.success("Term complete")
         st.write(st.session_state.end_message)
+        if st.session_state.end_summary:
+            ssum = st.session_state.end_summary
+            st.markdown("### End-of-term scorecard")
+            c1, c2 = st.columns(2)
+            c1.metric("Avg inflation (term)", f"{ssum['avg_inflation']:.2f}%")
+            c2.metric("Inflation target", f"{ssum['inflation_target']:.2f}%")
+            if ssum["unemployment_target"] is not None:
+                c3, c4 = st.columns(2)
+                c3.metric("Avg unemployment (term)", f"{ssum['avg_unemployment']:.2f}%")
+                c4.metric("Unemployment target", f"{ssum['unemployment_target']:.2f}%")
+
+            st.write(f"Inflation objective: {'met' if ssum['inflation_hit'] else 'missed'}")
+            if ssum["unemployment_target"] is not None:
+                st.write(f"Unemployment objective: {'met' if ssum['unemployment_hit'] else 'missed'}")
 
 
 if __name__ == "__main__":
