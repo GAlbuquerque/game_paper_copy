@@ -38,6 +38,7 @@ class EconomicGameApp:
     def __init__(self, root, difficulty="central_banker", scenario_name="Random", mandate="inflation_target"):
         self.root = root
         self.root.title(APP_TITLE)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_root_close)
         self.difficulty = difficulty
         self.scenario_name = scenario_name
         self.mandate = mandate
@@ -56,6 +57,13 @@ class EconomicGameApp:
         self.root.after(100, self.print_window_size)
         self.root.after(120, self.freeze_initial_window_geometry)
         self.configure_styles()
+
+    def _on_root_close(self):
+        if self.end_game_window and self.end_game_window.winfo_exists():
+            self.end_game_window.grab_release()
+            self.end_game_window.destroy()
+        self.root.quit()
+        self.root.destroy()
 
     def _configure_colors(self):
         self.bg_color = "#FFFFFF"
@@ -1011,6 +1019,7 @@ def main():
 class GameLauncher:
     def __init__(self, root):
         self.root = root
+        self.root.protocol("WM_DELETE_WINDOW", self._on_root_close)
         self.frame = ttk.Frame(root, padding=16)
         self.frame.pack(fill=tk.BOTH, expand=True)
         self.difficulty = tk.StringVar(value="principles")
@@ -1018,9 +1027,27 @@ class GameLauncher:
         self.mandate = tk.StringVar(value="Inflation Target")
         self._build()
 
+    def _on_root_close(self):
+        self.root.quit()
+        self.root.destroy()
+
     def _build(self):
+        self._build_main_menu()
+
+    def _clear_frame(self):
+        for child in self.frame.winfo_children():
+            child.destroy()
+
+    def _build_main_menu(self):
+        self._clear_frame()
         ttk.Label(self.frame, text=APP_TITLE, font=("Helvetica", 24)).pack(pady=6)
-        ttk.Label(self.frame, text="Create New Game").pack(anchor="w", pady=(12, 2))
+        ttk.Button(self.frame, text="Start New Game", command=self._build_new_game_menu).pack(fill=tk.X, pady=(12, 4))
+        ttk.Button(self.frame, text="Run Batch Simulations", command=self._batch_test_dialog).pack(fill=tk.X, pady=4)
+
+    def _build_new_game_menu(self):
+        self._clear_frame()
+        ttk.Label(self.frame, text=APP_TITLE, font=("Helvetica", 24)).pack(pady=6)
+        ttk.Label(self.frame, text="Difficulty").pack(anchor="w", pady=(12, 2))
         diff_frame = ttk.Frame(self.frame)
         diff_frame.pack(fill=tk.X)
         options = [
@@ -1030,7 +1057,7 @@ class GameLauncher:
         ]
         for label, value in options:
             ttk.Radiobutton(diff_frame, text=label, variable=self.difficulty, value=value).pack(anchor="w")
-        ttk.Button(diff_frame, text="Custom (coming soon)", state=tk.DISABLED).pack(anchor="w", pady=2)
+        ttk.Radiobutton(diff_frame, text="Custom (coming soon)", variable=self.difficulty, value="custom").pack(anchor="w")
 
         ttk.Label(self.frame, text="Scenario").pack(anchor="w", pady=(10, 2))
         scn = ttk.Frame(self.frame)
@@ -1043,9 +1070,8 @@ class GameLauncher:
         mandate_frame.pack(fill=tk.X)
         for mandate_name in ["Inflation Target", "Dual Mandate", "Custom (coming soon)"]:
             ttk.Radiobutton(mandate_frame, text=mandate_name, variable=self.mandate, value=mandate_name).pack(anchor="w")
-        ttk.Button(self.frame, text="Start New Game", command=self._start_game).pack(fill=tk.X, pady=(12, 4))
-        ttk.Button(self.frame, text="Load Game (coming soon)", command=self._load_stub).pack(fill=tk.X, pady=4)
-        ttk.Button(self.frame, text="Run Batch Simulations", command=self._batch_test_dialog).pack(fill=tk.X, pady=4)
+        ttk.Button(self.frame, text="Begin", command=self._start_game).pack(fill=tk.X, pady=(12, 4))
+        ttk.Button(self.frame, text="Back", command=self._build_main_menu).pack(fill=tk.X, pady=4)
 
     def _load_stub(self):
         messagebox.showinfo("Load Game", "Load game will be added in a future update.")
@@ -1057,6 +1083,9 @@ class GameLauncher:
             "Custom (coming soon)": "custom",
         }
         selected_mandate = self.mandate.get()
+        if self.difficulty.get() == "custom":
+            messagebox.showinfo("Difficulty", "Custom difficulty is coming soon.")
+            return
         if selected_mandate == "Custom (coming soon)":
             messagebox.showinfo("Mandate", "Custom mandate is coming soon.")
             return
