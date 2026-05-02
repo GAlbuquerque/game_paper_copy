@@ -112,6 +112,18 @@ def _state_dict(econ: Economy) -> dict:
     return econ.get_state()
 
 
+def _rate_change_requires_confirmation(econ: Economy, new_rate: float) -> bool:
+    current_rate = econ.interest_rate
+    current_inflation = econ.indicators.inflation_rate
+    return (new_rate > current_rate * 9) and (new_rate > current_inflation + 10)
+
+
+def _validate_rate_input(new_rate: float) -> tuple[bool, str]:
+    if new_rate < 0:
+        return False, "Interest rate cannot be negative."
+    return True, ""
+
+
 def _plot_histories(econ: Economy):
     inflation_history = econ.variables.get_history("inflation_rate")
     unemployment_history = econ.variables.get_history("unemployment_rate")
@@ -220,9 +232,22 @@ def main() -> None:
             step=0.25,
         )
 
+        needs_confirm = _rate_change_requires_confirmation(econ, float(user_rate))
+        if needs_confirm:
+            st.warning("This is a very large increase relative to current conditions.")
+            confirm_large_jump = st.checkbox("I confirm this large rate increase")
+        else:
+            confirm_large_jump = True
+
         if st.button("Next Quarter", type="primary", use_container_width=True, disabled=st.session_state.game_over):
-            _next_quarter(user_rate)
-            st.rerun()
+            ok, msg = _validate_rate_input(float(user_rate))
+            if not ok:
+                st.error(msg)
+            elif needs_confirm and not confirm_large_jump:
+                st.error("Please confirm the large rate increase before proceeding.")
+            else:
+                _next_quarter(user_rate)
+                st.rerun()
 
         st.subheader("Latest event")
         if st.session_state.current_event_name:
