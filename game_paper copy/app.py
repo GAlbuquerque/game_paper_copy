@@ -241,6 +241,8 @@ def _render_start_page() -> None:
 
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
+    st.markdown("""<style>.block-container {padding-top: 2rem;}</style>""", unsafe_allow_html=True)
+    st.title(APP_TITLE)
     if "game_started" not in st.session_state:
         st.session_state.game_started = False
 
