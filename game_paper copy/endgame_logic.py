@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 
@@ -11,7 +11,7 @@ class EndGameContext:
     inflation_history: Sequence[float]
     unemployment_history: Sequence[float]
     real_interest_rate_history: Sequence[float]
-    term_event_names: Sequence[str]
+    term_event_names: Sequence[str] = field(default_factory=tuple)
 
 
 def mandate_targets(mandate: str, dual_unemployment_target: int):
@@ -80,7 +80,8 @@ def build_end_of_term_message(ctx: EndGameContext) -> str:
 
     mixed = (not success) and improved_infl and improved_unemp and (half_close_infl or half_close_unemp)
     label, reput = classify_public_view(infl[-20:], unemp[-20:], list(ctx.real_interest_rate_history)[-20:])
-    event_ref = ", ".join(ctx.term_event_names) if ctx.term_event_names else "a volatile policy cycle"
+    term_events = getattr(ctx, "term_event_names", ())
+    event_ref = ", ".join(term_events) if term_events else "a volatile policy cycle"
 
     if success:
         target_msg = "Your mandate targets were met on average."

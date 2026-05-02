@@ -167,18 +167,19 @@ def _finish_game_if_needed() -> None:
 
     term_events = [e["name"] for e in st.session_state.news_log if e.get("in_term_quarter", 0) > 0 and e["in_term_quarter"] <= TERM_LENGTH]
 
-    message = build_end_of_term_message(
-        EndGameContext(
-            mandate=st.session_state.mandate,
-            initial_inflation=st.session_state.initial_inflation,
-            initial_unemployment=st.session_state.initial_unemployment,
-            dual_unemployment_target=st.session_state.dual_unemployment_target,
-            inflation_history=infl_term,
-            unemployment_history=unemp_term,
-            real_interest_rate_history=real_term,
-            term_event_names=term_events,
-        )
+    end_ctx = EndGameContext(
+        mandate=st.session_state.mandate,
+        initial_inflation=st.session_state.initial_inflation,
+        initial_unemployment=st.session_state.initial_unemployment,
+        dual_unemployment_target=st.session_state.dual_unemployment_target,
+        inflation_history=infl_term,
+        unemployment_history=unemp_term,
+        real_interest_rate_history=real_term,
     )
+    if hasattr(end_ctx, "term_event_names"):
+        end_ctx.term_event_names = term_events
+
+    message = build_end_of_term_message(end_ctx)
     st.session_state.end_message = message
     st.session_state.show_end_dialog = True
 
@@ -212,11 +213,11 @@ def _render_end_dialog() -> None:
     def _dlg():
         st.write(st.session_state.end_message)
         c1, c2 = st.columns(2)
-        if c1.button("Continue Playing", use_container_width=True):
+        if c1.button("Continue Playing", width="stretch"):
             st.session_state.game_over = False
             st.session_state.show_end_dialog = False
             st.rerun()
-        if c2.button("Retire", use_container_width=True):
+        if c2.button("Retire", width="stretch"):
             st.session_state.show_end_dialog = False
             st.rerun()
 
@@ -283,7 +284,7 @@ def main() -> None:
         st.session_state.show_targets_on_graph = g3.toggle("Show targets", value=st.session_state.show_targets_on_graph)
 
         chart = _plot_histories(econ, st.session_state.graph_window_mode, st.session_state.graph_split_mode, st.session_state.show_targets_on_graph, st.session_state.mandate, st.session_state.dual_unemployment_target, st.session_state.latest_fired)
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")
 
         st.markdown("### Policy action")
         if "rate_text" not in st.session_state:
@@ -291,7 +292,7 @@ def main() -> None:
 
         with st.form("policy_form", clear_on_submit=False):
             user_rate_text = st.text_input("Enter New Interest Rate", value=st.session_state.rate_text)
-            submitted = st.form_submit_button("Next", type="primary", use_container_width=True, disabled=st.session_state.game_over)
+            submitted = st.form_submit_button("Next", type="primary", width="stretch", disabled=st.session_state.game_over)
 
         if submitted:
             st.session_state.rate_text = user_rate_text
