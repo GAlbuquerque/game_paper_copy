@@ -33,15 +33,56 @@ def _activate_player_difficulty(econ: Economy, difficulty: str) -> None:
     econ.simplified_dynamics = difficulty == "principles"
 
 
+def _apply_scenario_initial_conditions(econ: Economy, scenario_name: str) -> None:
+    if scenario_name == "High Inflation":
+        econ.indicators.inflation_rate = 20.0
+        econ.interest_rate = 6.0
+        econ.indicators.unemployment_rate = 3.0
+        econ._initialize_variables()
+
+
+def _apply_bootstrap_persona(econ: Economy, scenario_name: str) -> None:
+    if scenario_name == "Stable Economy":
+        econ.cb_persona = "good"
+    elif scenario_name == "Stagflation":
+        econ.cb_persona = "dove"
+    elif scenario_name == "High Inflation":
+        econ.cb_persona = "careless"
+    elif scenario_name == "Depression":
+        econ.cb_persona = "hawk"
+
+
+def _apply_bootstrap_overrides_before_turn(econ: Economy, scenario_name: str, idx: int, total_turns: int) -> None:
+    if scenario_name == "Stable Economy" and idx >= total_turns - 10:
+        econ.last_event_quarter = econ.current_quarter
+
+
+def _apply_bootstrap_overrides_after_turn(econ: Economy, scenario_name: str, idx: int, total_turns: int) -> None:
+    if scenario_name == "Depression" and idx == total_turns - 3:
+        econ.indicators.unemployment_rate = max(econ.indicators.unemployment_rate, 12.0)
+        econ.indicators.inflation_rate = max(0.5, econ.indicators.inflation_rate - 1.0)
+        econ._initialize_variables()
+
+    if scenario_name == "Stagflation" and idx == total_turns - 3:
+        econ.indicators.inflation_rate += 2.0
+        econ.indicators.unemployment_rate += 1.2
+        econ._initialize_variables()
+
+
 def _new_game(difficulty: str, scenario_name: str, mandate: str) -> None:
     econ = Economy(difficulty="central_banker", scenario=_sample_scenario(scenario_name))
     econ.offset = OFFSET
     econ.player_start_turn = PLAYER_START_TURN
+    _apply_scenario_initial_conditions(econ, scenario_name)
 
     news_log = []
-    for _ in range(PLAYER_START_TURN + OFFSET):
+    total_turns = PLAYER_START_TURN + OFFSET
+    _apply_bootstrap_persona(econ, scenario_name)
+    for idx in range(total_turns):
+        _apply_bootstrap_overrides_before_turn(econ, scenario_name, idx, total_turns)
         econ.adjust_interest_rate_with_taylor()
         result = econ.simulate_quarter()
+        _apply_bootstrap_overrides_after_turn(econ, scenario_name, idx, total_turns)
         if result.get("event_name") and econ.current_quarter > OFFSET:
             user_q = max(1, econ.current_quarter - OFFSET)
             news_log.append(f"Q{user_q}: {result['event_name']}")
