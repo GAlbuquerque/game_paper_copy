@@ -152,7 +152,7 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
         if news_layer is not None:
             right_layers.append(news_layer)
         right_chart = alt.layer(*right_layers).properties(height=320, width=360)
-        return alt.hconcat(left_chart, right_chart).resolve_scale(color='shared')
+        return alt.hconcat(left_chart, right_chart).resolve_scale(color='shared').properties(height=320)
 
     layers = [base, player_line, *target_layers_left, *target_layers_right]
     if news_layer is not None:
@@ -164,21 +164,6 @@ def _chart_png_bytes(chart):
     buffer = io.BytesIO()
     chart.save(buffer, format="png")
     return buffer.getvalue()
-
-
-def _event_has_economic_impact(econ: Economy, event_name: str) -> bool:
-    if not event_name:
-        return False
-    event = next((e for e in econ.events if e.name == event_name), None)
-    if event is None:
-        return False
-    for values in event.effects_schedule.values():
-        if isinstance(values, list):
-            if any(abs(v) > 1e-12 for v in values):
-                return True
-        elif abs(values) > 1e-12:
-            return True
-    return False
 
 
 def _event_has_economic_impact(econ: Economy, event_name: str) -> bool:
@@ -338,9 +323,10 @@ def main() -> None:
         with g4:
             try:
                 chart_png = _chart_png_bytes(chart)
-                st.download_button("Download graph", data=chart_png, file_name="economic_graph.png", mime="image/png", width="stretch")
+                st.download_button("Download graph (PNG)", data=chart_png, file_name="economic_graph.png", mime="image/png", width="stretch")
             except Exception:
-                st.caption("Download unavailable in this environment.")
+                chart_html = chart.to_html().encode("utf-8")
+                st.download_button("Download graph (HTML)", data=chart_html, file_name="economic_graph.html", mime="text/html", width="stretch")
         st.altair_chart(chart, width="stretch")
 
         st.markdown("##### New Interest Rate")
