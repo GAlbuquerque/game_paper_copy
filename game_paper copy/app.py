@@ -4,6 +4,7 @@
 Faithful browser-oriented UX layer that reuses the existing simulation engine.
 """
 
+import io
 import matplotlib.pyplot as plt
 import streamlit as st
 
@@ -110,6 +111,8 @@ def _new_game(difficulty: str, scenario_name: str, mandate: str) -> None:
     st.session_state.graph_split_mode = False
     st.session_state.show_targets_on_graph = False
     st.session_state.end_summary = None
+    st.session_state.game_started = True
+    st.session_state.show_end_dialog = False
 
 
 def _state_dict(econ: Economy) -> dict:
@@ -222,6 +225,7 @@ def _finish_game_if_needed() -> None:
         "inflation_hit": abs(avg_infl - targets["inflation"]) <= 1.0,
         "unemployment_hit": (targets["unemployment"] is None) or (abs(avg_unemp - targets["unemployment"]) <= 1.0),
     }
+    st.session_state.show_end_dialog = True
 
 
 def _next_quarter(user_rate: float) -> None:
@@ -242,14 +246,67 @@ def _next_quarter(user_rate: float) -> None:
     _finish_game_if_needed()
 
 
+
+
+def _figure_png_bytes(fig) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=180, bbox_inches="tight")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def _render_end_dialog() -> None:
+    if not st.session_state.get("show_end_dialog", False):
+        return
+
+    @st.dialog("End of Game")
+    def _dlg():
+        st.write(st.session_state.end_message)
+        c1, c2 = st.columns(2)
+        if c1.button("Continue Playing", use_container_width=True):
+            st.session_state.game_over = False
+            st.session_state.show_end_dialog = False
+            st.rerun()
+        if c2.button("Retire", use_container_width=True):
+            st.session_state.show_end_dialog = False
+            st.rerun()
+
+    _dlg()
+
+
+def _render_start_page() -> None:
+    st.title(APP_TITLE)
+    st.subheader("Start Menu")
+    difficulty = st.selectbox("Difficulty", ["principles", "senior", "central_banker"], index=2, key="start_difficulty")
+    scenario_name = st.selectbox("Scenario", SCENARIOS, index=0, key="start_scenario")
+    mandate_label = st.radio("Mandate", list(MANDATES.keys()), index=0, key="start_mandate")
+    if st.button("Start Game", type="primary"):
+        _new_game(difficulty, scenario_name, MANDATES[mandate_label])
+        st.rerun()
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     st.title(APP_TITLE)
 
+    if "game_started" not in st.session_state:
+        st.session_state.game_started = False
+
+    if not st.session_state.game_started:
+        _render_start_page()
+        return
+
     if "economy" not in st.session_state:
         _new_game("central_banker", "Random", "inflation_target")
 
+    _render_end_dialog()
+
     with st.sidebar:
+        st.header("Game menu")
+        if st.button("Back to Start Menu", use_container_width=True):
+            st.session_state.game_started = False
+            st.rerun()
+        st.divider()
         st.header("New game")
         difficulty = st.selectbox("Difficulty", ["principles", "senior", "central_banker"], index=2)
         scenario_name = st.selectbox("Scenario", SCENARIOS, index=0)
@@ -261,6 +318,7 @@ def main() -> None:
     econ = st.session_state.economy
     state = _state_dict(econ)
 
+    st.markdown("### Mandate")
     st.caption(
         mandate_text(
             st.session_state.mandate,
@@ -268,12 +326,14 @@ def main() -> None:
         )
     )
 
+    st.markdown("### Economic Indicators")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Quarter", min(st.session_state.player_turn, TERM_LENGTH))
     c2.metric("Inflation", f"{state['inflation_rate']:.2f}%")
     c3.metric("Unemployment", f"{state['unemployment_rate']:.2f}%")
     c4.metric("Interest Rate", f"{state['interest_rate']:.2f}%")
 
+    st.markdown("### Economic Graphs")
     left, right = st.columns([2, 1])
     with left:
         st.subheader("Economic trends")
@@ -282,14 +342,16 @@ def main() -> None:
         st.session_state.graph_split_mode = g2.toggle("Split charts", value=st.session_state.graph_split_mode)
         st.session_state.show_targets_on_graph = g3.toggle("Show targets", value=st.session_state.show_targets_on_graph)
 
-        st.pyplot(_plot_histories(
+        fig = _plot_histories(
             econ,
             st.session_state.graph_window_mode,
             st.session_state.graph_split_mode,
             st.session_state.show_targets_on_graph,
             st.session_state.mandate,
             st.session_state.dual_unemployment_target,
-        ), clear_figure=True)
+        )
+        st.pyplot(fig, clear_figure=True)
+        st.download_button("Download graph (PNG)", data=_figure_png_bytes(fig), file_name="pirs_graph.png", mime="image/png")
 
     with right:
         st.subheader("Policy action")
