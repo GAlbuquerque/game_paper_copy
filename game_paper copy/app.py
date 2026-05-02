@@ -287,7 +287,7 @@ def main() -> None:
 
     with outer_left:
         st.markdown("### News Feed")
-        news_container = st.container(height=686, border=True)
+        news_container = st.container(height=687, border=True)
         with news_container:
             if st.session_state.news_log:
                 for idx, item in enumerate(list(reversed(st.session_state.news_log))):
@@ -314,13 +314,13 @@ def main() -> None:
         st.session_state.show_targets_on_graph = g3.toggle("Show targets", value=st.session_state.show_targets_on_graph)
 
         chart = _plot_histories(econ, st.session_state.graph_window_mode, st.session_state.graph_split_mode, st.session_state.show_targets_on_graph, st.session_state.mandate, st.session_state.dual_unemployment_target, st.session_state.latest_fired)
-        with g4:
-            try:
-                chart_png = _chart_png_bytes(chart)
-                st.download_button("Download graph (PNG)", data=chart_png, file_name="economic_graph.png", mime="image/png", width="stretch")
-            except Exception:
-                chart_html = chart.to_html().encode("utf-8")
-                st.download_button("Download graph (HTML)", data=chart_html, file_name="economic_graph.html", mime="text/html", width="stretch")
+        #with g4:
+         #   try:
+          #      chart_png = _chart_png_bytes(chart)
+           #     st.download_button("Download graph (PNG)", data=chart_png, file_name="economic_graph.png", mime="image/png", width="stretch")
+            #except Exception:
+             #   chart_html = chart.to_html().encode("utf-8")
+              #  st.download_button("Download graph (HTML)", data=chart_html, file_name="economic_graph.html", mime="text/html", width="stretch")
         st.altair_chart(chart, width="stretch")
 
         st.markdown("##### New Interest Rate")
