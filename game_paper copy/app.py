@@ -111,8 +111,13 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
         rows.append({"Quarter": q, "Metric": "Interest Rate", "Value": interest_rate_history[start_idx + i], "Panel": "Top" if split_mode else "Combined"})
         rows.append({"Quarter": q, "Metric": "Unemployment", "Value": unemployment_history[start_idx + i], "Panel": "Bottom" if split_mode else "Combined"})
 
+    if econ.difficulty == "principles":
+        natural = econ.variables.get_history("natural_unemployment_rate")[start_idx:]
+        for i, q in enumerate(quarters):
+            rows.append({"Quarter": q, "Metric": "Natural unemployment", "Value": natural[i], "Panel": "Bottom" if split_mode else "Combined"})
+
     df = pd.DataFrame(rows)
-    palette = {"Inflation": "red", "Unemployment": "blue", "Interest Rate": "green"}
+    palette = {"Inflation": "red", "Unemployment": "blue", "Interest Rate": "green", "Natural unemployment": "black"}
 
     base = alt.Chart(df).mark_line().encode(
         x=alt.X("Quarter:Q", title="Quarter"),
@@ -237,8 +242,8 @@ def _render_start_page() -> None:
 
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
+    st.markdown("""<style>.block-container {padding-top: 2rem;}</style>""", unsafe_allow_html=True)
     st.title(APP_TITLE)
-
     if "game_started" not in st.session_state:
         st.session_state.game_started = False
 
@@ -260,7 +265,7 @@ def main() -> None:
         news_container = st.container(height=620, border=True)
         with news_container:
             if st.session_state.news_log:
-                for idx, item in enumerate(list(reversed(st.session_state.news_log))[:5]):
+                for idx, item in enumerate(list(reversed(st.session_state.news_log))[:6]):
                     color = "red" if idx == 0 and st.session_state.latest_fired else "inherit"
                     label = f"Q{item['quarter']}: {item['name']}"
                     st.markdown(f"<div style='color:{color};font-weight:600'>{label}</div>", unsafe_allow_html=True)
