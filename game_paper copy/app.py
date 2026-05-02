@@ -145,7 +145,11 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
         layers.append(news_banner)
 
     chart = alt.layer(*layers).properties(height=320)
-    return alt.vconcat(chart.transform_filter("datum.Panel == 'Top'"), chart.transform_filter("datum.Panel == 'Bottom'")).resolve_scale(color='shared') if split_mode else chart
+    if split_mode:
+        top = chart.transform_filter("datum.Panel == 'Top'").properties(height=320, width=320)
+        bottom = chart.transform_filter("datum.Panel == 'Bottom'").properties(height=320, width=320)
+        return alt.hconcat(top, bottom).resolve_scale(color='shared')
+    return chart
 
 
 def _finish_game_if_needed() -> None:
@@ -255,7 +259,7 @@ def main() -> None:
         news_container = st.container(height=620, border=True)
         with news_container:
             if st.session_state.news_log:
-                for idx, item in enumerate(reversed(st.session_state.news_log)):
+                for idx, item in enumerate(list(reversed(st.session_state.news_log))[:5]):
                     color = "red" if idx == 0 and st.session_state.latest_fired else "inherit"
                     label = f"Q{item['quarter']}: {item['name']}"
                     st.markdown(f"<div style='color:{color};font-weight:600'>{label}</div>", unsafe_allow_html=True)
@@ -281,27 +285,27 @@ def main() -> None:
         chart = _plot_histories(econ, st.session_state.graph_window_mode, st.session_state.graph_split_mode, st.session_state.show_targets_on_graph, st.session_state.mandate, st.session_state.dual_unemployment_target, st.session_state.latest_fired)
         st.altair_chart(chart, use_container_width=True)
 
-    st.markdown("### Policy action")
-    if "rate_text" not in st.session_state:
-        st.session_state.rate_text = f"{state['interest_rate']:.2f}"
+        st.markdown("### Policy action")
+        if "rate_text" not in st.session_state:
+            st.session_state.rate_text = f"{state['interest_rate']:.2f}"
 
-    with st.form("policy_form", clear_on_submit=False):
-        user_rate_text = st.text_input("Enter New Interest Rate", value=st.session_state.rate_text)
-        submitted = st.form_submit_button("Next", type="primary", use_container_width=True, disabled=st.session_state.game_over)
+        with st.form("policy_form", clear_on_submit=False):
+            user_rate_text = st.text_input("Enter New Interest Rate", value=st.session_state.rate_text)
+            submitted = st.form_submit_button("Next", type="primary", use_container_width=True, disabled=st.session_state.game_over)
 
-    if submitted:
-        st.session_state.rate_text = user_rate_text
-        try:
-            user_rate = float(user_rate_text)
-        except ValueError:
-            st.error("Please enter a valid number for the interest rate.")
-            return
-        if user_rate < 0:
-            st.error("Interest rate cannot be negative.")
-            return
-        _next_quarter(user_rate)
-        st.session_state.rate_text = f"{st.session_state.economy.interest_rate:.2f}"
-        st.rerun()
+        if submitted:
+            st.session_state.rate_text = user_rate_text
+            try:
+                user_rate = float(user_rate_text)
+            except ValueError:
+                st.error("Please enter a valid number for the interest rate.")
+                return
+            if user_rate < 0:
+                st.error("Interest rate cannot be negative.")
+                return
+            _next_quarter(user_rate)
+            st.session_state.rate_text = f"{st.session_state.economy.interest_rate:.2f}"
+            st.rerun()
 
 
 if __name__ == "__main__":
