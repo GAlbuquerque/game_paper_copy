@@ -146,7 +146,7 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
     rate = interest_rate_history[start_idx:]
 
     if split_mode:
-        fig, axes = plt.subplots(2, 1, figsize=(10, 5.2), sharex=True)
+        fig, axes = plt.subplots(2, 1, figsize=(8.8, 4.6), sharex=True)
         axes[0].plot(x, infl, color="red", label="Inflation")
         axes[0].plot(x, rate, color="green", linestyle="--", label="Interest Rate")
         axes[1].plot(x, unemp, color="blue", label="Unemployment")
@@ -168,7 +168,7 @@ def _plot_histories(econ: Economy, window_mode: str, split_mode: bool, show_targ
             if t["unemployment"] is not None:
                 axes[1].axhline(t["unemployment"], color="blue", linestyle=':', alpha=0.6)
     else:
-        fig, ax = plt.subplots(figsize=(10, 4.2))
+        fig, ax = plt.subplots(figsize=(8.8, 3.6))
         ax.plot(x, infl, label="Inflation", color="red")
         ax.plot(x, unemp, label="Unemployment", color="blue")
         ax.plot(x, rate, label="Interest Rate", color="green", linestyle="--")
@@ -421,22 +421,26 @@ def main() -> None:
 
     _render_end_dialog()
 
-    with st.sidebar:
-        st.header("Game menu")
-        if st.button("Back to Start Menu", use_container_width=True):
+    with st.expander("Game menu", expanded=False):
+        g1, g2, g3, g4 = st.columns([1,1,1,1])
+        difficulty = g1.radio("Difficulty", ["principles", "senior", "central_banker"], index=2)
+        scenario_name = g2.radio("Scenario", SCENARIOS, index=0)
+        mandate_label = g3.radio("Mandate", list(MANDATES.keys()), index=0)
+        if g4.button("Back to Start Menu", use_container_width=True):
             st.session_state.game_started = False
             st.rerun()
-        st.divider()
-        st.header("New game")
-        difficulty = st.selectbox("Difficulty", ["principles", "senior", "central_banker"], index=2)
-        scenario_name = st.selectbox("Scenario", SCENARIOS, index=0)
-        mandate_label = st.radio("Mandate", list(MANDATES.keys()), index=0)
-        if st.button("Start New Game", use_container_width=True):
+        if g4.button("Start New Game", use_container_width=True):
             _new_game(difficulty, scenario_name, MANDATES[mandate_label])
             st.rerun()
 
     econ = st.session_state.economy
     state = _state_dict(econ)
+
+    st.markdown("### Economic Indicators")
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(f"**Inflation Rate:** {state['inflation_rate']:.2f}%")
+    c2.markdown(f"**Unemployment Rate:** {state['unemployment_rate']:.2f}%")
+    c3.markdown(f"**Interest Rate:** {state['interest_rate']:.2f}%")
 
     st.markdown("### Mandate")
     st.caption(
@@ -446,17 +450,13 @@ def main() -> None:
         )
     )
 
-    st.markdown("### Economic Indicators")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Inflation", f"{state['inflation_rate']:.2f}%")
-    c2.metric("Unemployment", f"{state['unemployment_rate']:.2f}%")
-    c3.metric("Interest Rate", f"{state['interest_rate']:.2f}%")
-
     st.markdown("### Economic Graphs")
-    with st.container():
+    left_col, right_col = st.columns([2.1, 1.1])
+    with left_col:
         st.subheader("Economic trends")
         g1, g2, g3 = st.columns(3)
-        st.session_state.graph_window_mode = g1.selectbox("History", ["full", "past20"], index=0 if st.session_state.graph_window_mode=="full" else 1)
+        past20 = g1.toggle("Past 20 turns", value=(st.session_state.graph_window_mode == "past20"))
+        st.session_state.graph_window_mode = "past20" if past20 else "full"
         st.session_state.graph_split_mode = g2.toggle("Split charts", value=st.session_state.graph_split_mode)
         st.session_state.show_targets_on_graph = g3.toggle("Show targets", value=st.session_state.show_targets_on_graph)
 
@@ -468,8 +468,24 @@ def main() -> None:
             st.session_state.mandate,
             st.session_state.dual_unemployment_target,
         )
-        st.pyplot(fig, clear_figure=True)
+        st.pyplot(fig, clear_figure=False)
         st.download_button("Download graph (PNG)", data=_figure_png_bytes(fig), file_name="pirs_graph.png", mime="image/png")
+
+    with right_col:
+        st.markdown("### Latest event")
+        if st.session_state.current_event_name:
+            st.write(f"**{st.session_state.current_event_name}**")
+            if st.session_state.last_event_detail:
+                st.caption(st.session_state.last_event_detail)
+        else:
+            st.write("No major event this quarter.")
+
+        st.markdown("### News Feed")
+        if st.session_state.news_log:
+            for item in st.session_state.news_log[-12:]:
+                st.write(f"- {item}")
+        else:
+            st.write("No events yet.")
 
     st.markdown("### Policy action")
     if "rate_text" not in st.session_state:
