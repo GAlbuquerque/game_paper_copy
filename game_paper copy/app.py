@@ -23,7 +23,7 @@ MANDATES = {
 SHOW_START_EXPLAINERS = 1
 
 DIFFICULTY_EXPLAINERS = {
-    "Principles": (
+    "principles": (
         "Principles mode simplifies the economy so cause-and-effect is easier to understand. "
         "The effects of interest rates on employment are immediate, inflation reacts quickly to any change in unemployment, and economic shocks are very rare. "
         "This mode is designed for students taking Principles of Macroeconomics or players learning the basics of monetary policy."
