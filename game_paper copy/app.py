@@ -43,8 +43,8 @@ DIFFICULTY_EXPLAINERS = {
 SCENARIO_EXPLAINERS = {
     "Random": (
         "Random starts from a neutral setup and lets the simulation draw a broad mix of possible developments. "
-        "You must diagnose conditions as they evolve instead of planning around a known macro story. "
-        "This is ideal if you want replayability and surprise from run to run."
+        "You must diagnose conditions as they evolve."
+        "This mode is ideal if you want replayability and surprise from run to run."
     ),
     "Stable Economy": (
         "Stable Economy begins with generally calm conditions and fewer immediate disruptions. "
