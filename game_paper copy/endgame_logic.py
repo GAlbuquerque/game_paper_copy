@@ -93,8 +93,8 @@ def build_end_of_term_message(ctx: EndGameContext) -> str:
     if t["unemployment"] is not None:
         un_gap0 = max(0.0, ctx.initial_unemployment - t["unemployment"])
         un_gap4 = max(0.0, (sum(unemp[-4:]) / max(1, len(unemp[-4:]))) - t["unemployment"])
-        improved_unemp = un_gap4 == 0 or un_gap4 < un_gap0
-        half_close_unemp = un_gap4 == 0 or (un_gap4 <= 0.5 * un_gap0 if un_gap0 > 0 else True)
+        improved_unemp = ( (sum(unemp[-4:]) / max(1, len(unemp[-4:]))) -  ctx.initial_unemployment <0)
+        half_close_unemp = un_gap4 <= 0.5 * un_gap0
         mixed = (not success) and improved_infl and improved_unemp and (half_close_infl or half_close_unemp)
         
     label, reput = classify_public_view(infl[-20:], unemp[-20:], list(ctx.real_interest_rate_history)[-20:])
