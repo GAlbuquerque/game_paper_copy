@@ -86,13 +86,15 @@ def build_end_of_term_message(ctx: EndGameContext) -> str:
 
     improved_unemp = True
     half_close_unemp = False
+    mixed = (not success) and improved_infl and half_close_infl 
+
     if t["unemployment"] is not None:
         un_gap0 = abs(ctx.initial_unemployment - t["unemployment"])
         un_gap4 = abs((sum(unemp[-4:]) / max(1, len(unemp[-4:]))) - t["unemployment"])
         improved_unemp = un_gap4 < un_gap0
         half_close_unemp = un_gap4 <= 0.5 * un_gap0 if un_gap0 > 0 else True
-
-    mixed = (not success) and improved_infl and improved_unemp and (half_close_infl or half_close_unemp)
+        mixed = (not success) and improved_infl and improved_unemp and (half_close_infl or half_close_unemp)
+        
     label, reput = classify_public_view(infl[-20:], unemp[-20:], list(ctx.real_interest_rate_history)[-20:])
     term_events = getattr(ctx, "term_event_names", ())
     event_ref = _join_with_and(term_events) if term_events else "a volatile policy cycle"
