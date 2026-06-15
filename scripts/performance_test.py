@@ -207,7 +207,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def require_selenium() -> tuple[Any, Any, Any, Any, Any, Any, Any]:
+def require_selenium() -> tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
     if importlib.util.find_spec("selenium") is None:
         raise SystemExit(
             "This browser test needs Selenium. Install it locally with:\n"
@@ -222,7 +222,8 @@ def require_selenium() -> tuple[Any, Any, Any, Any, Any, Any, Any]:
     service = importlib.import_module("selenium.webdriver.chrome.service").Service
     expected_conditions = importlib.import_module("selenium.webdriver.support.expected_conditions")
     wait = importlib.import_module("selenium.webdriver.support.ui").WebDriverWait
-    return webdriver, by, keys, options, service, expected_conditions, wait
+    action_chains = importlib.import_module("selenium.webdriver.common.action_chains").ActionChains
+    return webdriver, by, keys, options, service, expected_conditions, wait, action_chains
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -267,8 +268,8 @@ def human_pause(args: argparse.Namespace) -> None:
         time.sleep(pause_seconds)
 
 
-def make_driver(args: argparse.Namespace, selenium_api: tuple[Any, Any, Any, Any, Any, Any, Any]) -> Any:
-    webdriver, _, _, Options, Service, _, _ = selenium_api
+def make_driver(args: argparse.Namespace, selenium_api: tuple[Any, Any, Any, Any, Any, Any, Any, Any]) -> Any:
+    webdriver, _, _, Options, Service, _, _, _ = selenium_api
     chrome_options = Options()
     if HEADLESS_BROWSER and not args.headed:
         chrome_options.add_argument("--headless=new")
@@ -289,27 +290,43 @@ def button_xpath(label: str) -> str:
     )
 
 
+def visible_elements(driver: Any, By: Any, xpath: str) -> list[Any]:
+    return [element for element in driver.find_elements(By.XPATH, xpath) if element.is_displayed()]
 
-def click_visible_text(driver: Any, wait: Any, By: Any, label: str) -> None:
-    xpath = f"//*[normalize-space()={label!r}]"
-    elements = wait.until(lambda d: [element for element in d.find_elements(By.XPATH, xpath) if element.is_displayed()])
-    element = elements[0]
+
+def robust_click(driver: Any, element: Any, ActionChains: Any) -> None:
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
-    element.click()
+    time.sleep(0.2)
+    try:
+        element.click()
+        return
+    except Exception:
+        pass
+    try:
+        ActionChains(driver).move_to_element(element).pause(0.2).click().perform()
+        return
+    except Exception:
+        pass
+    driver.execute_script("arguments[0].click();", element)
 
 
-def select_game_setup(driver: Any, wait: Any, By: Any, args: argparse.Namespace) -> None:
+def click_visible_text(driver: Any, wait: Any, By: Any, ActionChains: Any, label: str) -> None:
+    xpath = f"//*[normalize-space()={label!r}]"
+    elements = wait.until(lambda d: visible_elements(d, By, xpath))
+    robust_click(driver, elements[0], ActionChains)
+
+
+def select_game_setup(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
     for label in (args.difficulty, args.scenario, args.mandate):
-        click_visible_text(driver, wait, By, label)
+        click_visible_text(driver, wait, By, ActionChains, label)
         human_pause(args)
 
 
-def click_start_game(driver: Any, wait: Any, By: Any, EC: Any, args: argparse.Namespace) -> None:
-    start_button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Start Game"))))
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", start_button)
+def click_start_game(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
+    start_buttons = wait.until(lambda d: visible_elements(d, By, button_xpath("Start Game")))
     human_pause(args)
-    start_button.click()
-    wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
+    robust_click(driver, start_buttons[0], ActionChains)
+    wait.until(lambda d: visible_elements(d, By, button_xpath("Next")) or visible_elements(d, By, "//input"))
 
 
 def read_current_interest_rate(driver: Any, wait: Any, By: Any, EC: Any) -> float:
@@ -325,7 +342,7 @@ def choose_interest_rate(current_rate: float, rate_noise: float) -> float:
     return max(0.0, current_rate + random.gauss(0.0, rate_noise))
 
 
-def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, rate: float, args: argparse.Namespace) -> None:
+def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> None:
     input_el = wait.until(EC.element_to_be_clickable((By.XPATH, "//input")))
     human_pause(args)
     input_el.send_keys(Keys.CONTROL, "a")
@@ -333,16 +350,16 @@ def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, rate: float
     human_pause(args)
 
     next_button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
-    next_button.click()
+    robust_click(driver, next_button, ActionChains)
     wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
 
 
 def run_player(
     player_id: int,
     args: argparse.Namespace,
-    selenium_api: tuple[Any, Any, Any, Any, Any, Any, Any],
+    selenium_api: tuple[Any, Any, Any, Any, Any, Any, Any, Any],
 ) -> tuple[list[TurnSample], list[Failure]]:
-    _, By, Keys, _, _, EC, WebDriverWait = selenium_api
+    _, By, Keys, _, _, EC, WebDriverWait, ActionChains = selenium_api
     samples: list[TurnSample] = []
     failures: list[Failure] = []
     driver = None
@@ -351,8 +368,8 @@ def run_player(
         driver = make_driver(args, selenium_api)
         wait = WebDriverWait(driver, args.action_timeout)
         driver.get(args.url)
-        select_game_setup(driver, wait, By, args)
-        click_start_game(driver, wait, By, EC, args)
+        select_game_setup(driver, wait, By, ActionChains, args)
+        click_start_game(driver, wait, By, ActionChains, args)
     except Exception as exc:  # noqa: BLE001 - this is a failure-reporting harness
         screenshot_path, html_path = save_failure_artifacts(driver, player_id, "startup")
         failures.append(Failure(player_id, "startup", repr(exc), traceback.format_exc(), screenshot_path, html_path))
@@ -365,7 +382,7 @@ def run_player(
             current_rate = read_current_interest_rate(driver, wait, By, EC)
             rate = choose_interest_rate(current_rate, args.rate_noise)
             started = time.perf_counter()
-            submit_turn(driver, wait, By, EC, Keys, rate, args)
+            submit_turn(driver, wait, By, EC, Keys, ActionChains, rate, args)
             samples.append(TurnSample(player_id, turn_number, rate, (time.perf_counter() - started) * 1000.0))
         except Exception as exc:  # noqa: BLE001 - keep other players running after a failure
             screenshot_path, html_path = save_failure_artifacts(driver, player_id, turn_number)
