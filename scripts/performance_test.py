@@ -23,23 +23,78 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 # =============================================================================
-# EDIT THESE VALUES WHEN RUNNING FROM SPYDER
+# TESTING PARAMETERS -- EDIT THESE VALUES WHEN RUNNING FROM SPYDER
 # =============================================================================
+# TARGET_URL: the hosted Streamlit game website that the browser bots will open.
 TARGET_URL = "https://pirsgame.streamlit.app/"
-NUMBER_OF_PLAYERS = 10
+
+# NUMBER_OF_PLAYERS: total fake players for the whole test.
+# Start with 1 so you can verify the bot reaches the game screen before scaling up.
+NUMBER_OF_PLAYERS = 1
+
+# TURNS_PER_PLAYER: how many game turns each fake player should play.
+# One turn means: read current rate, choose a new interest rate, type it, click Next.
 TURNS_PER_PLAYER = 16
-MAX_WORKERS = 3
-HEADLESS_BROWSER = True
+
+# MAX_WORKERS: how many browser windows run at the same time.
+# Example: NUMBER_OF_PLAYERS=20 and MAX_WORKERS=5 means 5 browsers run concurrently
+# until all 20 players have had a turn. More workers creates more load but uses more CPU/RAM.
+MAX_WORKERS = 1
+
+# HEADLESS_BROWSER: whether Chrome is visible.
+# False = open a normal visible Chrome window so you can watch/debug.
+# True = run Chrome invisibly in the background, which is better for larger load tests.
+HEADLESS_BROWSER = False
+
+# GAME_*_LABEL: menu choices the bot clicks before pressing Start Game.
+# These strings must exactly match the labels you see in the Streamlit start menu.
+GAME_DIFFICULTY_LABEL = "Central Bank Governor"
+GAME_SCENARIO_LABEL = "Random"
+GAME_MANDATE_LABEL = "Inflation Target"
+
+# PAGE_LOAD_TIMEOUT_SECONDS: maximum seconds Selenium waits for the website to load.
+# If the Streamlit app is asleep/cold-starting, increasing this can help.
 PAGE_LOAD_TIMEOUT_SECONDS = 60.0
-ACTION_TIMEOUT_SECONDS = 30.0
+
+# ACTION_TIMEOUT_SECONDS: maximum seconds Selenium waits for a UI element to appear/click.
+# This applies to menu options, Start Game, the interest-rate input, and Next.
+# If you see TimeoutException, increase this or run with HEADLESS_BROWSER=False to watch.
+ACTION_TIMEOUT_SECONDS = 120.0
+
+# SECONDS_BETWEEN_TURNS: fixed pause after each completed turn.
+# This is added on top of the random human-like think times below.
 SECONDS_BETWEEN_TURNS = 0.25
+
+# RATE_NOISE: how much randomness to add to the current interest rate.
+# Example: 0.25 means the bot usually chooses a rate close to the current one.
 RATE_NOISE = 0.25
+
+# USE_RANDOM_THINK_TIME: whether bots pause like humans before clicks/typing.
+# True is more realistic; False makes the test click as fast as Selenium can.
 USE_RANDOM_THINK_TIME = True
+
+# THINK_TIME_MEDIAN_SECONDS: typical human pause length.
+# With the defaults, many pauses land around a few seconds.
 THINK_TIME_MEDIAN_SECONDS = 5.0
+
+# THINK_TIME_SIGMA: controls how spread out the random pauses are.
+# Larger values create more very-slow users in the long right tail.
 THINK_TIME_SIGMA = 0.55
+
+# THINK_TIME_MIN_SECONDS: shortest allowed human-like pause.
+# This keeps bots from clicking unrealistically instantly.
 THINK_TIME_MIN_SECONDS = 2.0
+
+# THINK_TIME_MAX_SECONDS: longest allowed human-like pause.
+# This caps the long tail so one bot does not wait forever.
 THINK_TIME_MAX_SECONDS = 45.0
+
+# ARTIFACTS_DIR: folder where screenshots and HTML are saved when a bot fails.
+# Check this folder when Selenium cannot find a button or input.
 ARTIFACTS_DIR = "performance_test_artifacts"
+
+# ALLOW_FAILURES: whether failures still count as a successful script run.
+# False = return a failure exit code if any bot fails. True = always finish successfully.
 ALLOW_FAILURES = False
 # =============================================================================
 
@@ -93,6 +148,21 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=MAX_WORKERS,
         help=f"maximum concurrent browser players (default from code: {MAX_WORKERS})",
+    )
+    parser.add_argument(
+        "--difficulty",
+        default=GAME_DIFFICULTY_LABEL,
+        help=f"menu difficulty label to select (default from code: {GAME_DIFFICULTY_LABEL})",
+    )
+    parser.add_argument(
+        "--scenario",
+        default=GAME_SCENARIO_LABEL,
+        help=f"menu scenario label to select (default from code: {GAME_SCENARIO_LABEL})",
+    )
+    parser.add_argument(
+        "--mandate",
+        default=GAME_MANDATE_LABEL,
+        help=f"menu mandate label to select (default from code: {GAME_MANDATE_LABEL})",
     )
     parser.add_argument(
         "--headed",
@@ -219,8 +289,24 @@ def button_xpath(label: str) -> str:
     )
 
 
+
+def click_visible_text(driver: Any, wait: Any, By: Any, label: str) -> None:
+    xpath = f"//*[normalize-space()={label!r}]"
+    elements = wait.until(lambda d: [element for element in d.find_elements(By.XPATH, xpath) if element.is_displayed()])
+    element = elements[0]
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+    element.click()
+
+
+def select_game_setup(driver: Any, wait: Any, By: Any, args: argparse.Namespace) -> None:
+    for label in (args.difficulty, args.scenario, args.mandate):
+        click_visible_text(driver, wait, By, label)
+        human_pause(args)
+
+
 def click_start_game(driver: Any, wait: Any, By: Any, EC: Any, args: argparse.Namespace) -> None:
     start_button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Start Game"))))
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", start_button)
     human_pause(args)
     start_button.click()
     wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
@@ -265,6 +351,7 @@ def run_player(
         driver = make_driver(args, selenium_api)
         wait = WebDriverWait(driver, args.action_timeout)
         driver.get(args.url)
+        select_game_setup(driver, wait, By, args)
         click_start_game(driver, wait, By, EC, args)
     except Exception as exc:  # noqa: BLE001 - this is a failure-reporting harness
         screenshot_path, html_path = save_failure_artifacts(driver, player_id, "startup")
@@ -366,6 +453,9 @@ def main() -> int:
     print(f"URL: {args.url}")
     print(f"Players: {args.players}")
     print(f"Turns per player: {args.turns}")
+    print(f"Menu difficulty: {args.difficulty}")
+    print(f"Menu scenario: {args.scenario}")
+    print(f"Menu mandate: {args.mandate}")
     print(f"Concurrent browser workers: {workers}")
     print(f"Random think time: {not args.no_think_time and USE_RANDOM_THINK_TIME}")
     print(f"Completed turns: {completed_turns}/{expected_turns}")
