@@ -11,10 +11,13 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.util
+import math
 import random
 import statistics
+import sys
 import time
 import traceback
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Iterable
@@ -31,6 +34,12 @@ PAGE_LOAD_TIMEOUT_SECONDS = 60.0
 ACTION_TIMEOUT_SECONDS = 30.0
 SECONDS_BETWEEN_TURNS = 0.25
 RATE_NOISE = 0.25
+USE_RANDOM_THINK_TIME = True
+THINK_TIME_MEDIAN_SECONDS = 5.0
+THINK_TIME_SIGMA = 0.55
+THINK_TIME_MIN_SECONDS = 2.0
+THINK_TIME_MAX_SECONDS = 45.0
+ARTIFACTS_DIR = "performance_test_artifacts"
 ALLOW_FAILURES = False
 # =============================================================================
 
@@ -49,6 +58,8 @@ class Failure:
     turn_number: int | str
     error: str
     traceback: str
+    screenshot_path: str | None = None
+    html_path: str | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -113,6 +124,11 @@ def parse_args() -> argparse.Namespace:
         help=f"random policy-rate noise added each turn (default from code: {RATE_NOISE})",
     )
     parser.add_argument(
+        "--no-think-time",
+        action="store_true",
+        help="disable random human-like pauses between actions",
+    )
+    parser.add_argument(
         "--allow-failures",
         action="store_true",
         default=ALLOW_FAILURES,
@@ -168,6 +184,19 @@ def summarize_response_times(samples: list[TurnSample]) -> dict[str, float]:
     }
 
 
+def sample_think_time(args: argparse.Namespace) -> float:
+    if args.no_think_time or not USE_RANDOM_THINK_TIME:
+        return 0.0
+    sampled = random.lognormvariate(math.log(THINK_TIME_MEDIAN_SECONDS), THINK_TIME_SIGMA)
+    return min(THINK_TIME_MAX_SECONDS, max(THINK_TIME_MIN_SECONDS, sampled))
+
+
+def human_pause(args: argparse.Namespace) -> None:
+    pause_seconds = sample_think_time(args)
+    if pause_seconds > 0:
+        time.sleep(pause_seconds)
+
+
 def make_driver(args: argparse.Namespace, selenium_api: tuple[Any, Any, Any, Any, Any, Any, Any]) -> Any:
     webdriver, _, _, Options, Service, _, _ = selenium_api
     chrome_options = Options()
@@ -183,12 +212,18 @@ def make_driver(args: argparse.Namespace, selenium_api: tuple[Any, Any, Any, Any
     return driver
 
 
-def click_start_game(driver: Any, wait: Any, By: Any, EC: Any) -> None:
-    start_button_xpath = "//button[.//*[normalize-space()='Start Game'] or normalize-space()='Start Game']"
-    start_button = wait.until(EC.element_to_be_clickable((By.XPATH, start_button_xpath)))
+def button_xpath(label: str) -> str:
+    return (
+        "//button[normalize-space()=$label or .//*[normalize-space()=$label]]"
+        .replace("$label", repr(label))
+    )
+
+
+def click_start_game(driver: Any, wait: Any, By: Any, EC: Any, args: argparse.Namespace) -> None:
+    start_button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Start Game"))))
+    human_pause(args)
     start_button.click()
-    next_button_xpath = "//button[.//*[normalize-space()='Next'] or normalize-space()='Next']"
-    wait.until(EC.element_to_be_clickable((By.XPATH, next_button_xpath)))
+    wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
 
 
 def read_current_interest_rate(driver: Any, wait: Any, By: Any, EC: Any) -> float:
@@ -204,15 +239,16 @@ def choose_interest_rate(current_rate: float, rate_noise: float) -> float:
     return max(0.0, current_rate + random.gauss(0.0, rate_noise))
 
 
-def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, rate: float) -> None:
+def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, rate: float, args: argparse.Namespace) -> None:
     input_el = wait.until(EC.element_to_be_clickable((By.XPATH, "//input")))
+    human_pause(args)
     input_el.send_keys(Keys.CONTROL, "a")
     input_el.send_keys(f"{rate:.2f}")
+    human_pause(args)
 
-    next_button_xpath = "//button[.//*[normalize-space()='Next'] or normalize-space()='Next']"
-    next_button = wait.until(EC.element_to_be_clickable((By.XPATH, next_button_xpath)))
+    next_button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
     next_button.click()
-    wait.until(EC.element_to_be_clickable((By.XPATH, next_button_xpath)))
+    wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
 
 
 def run_player(
@@ -229,9 +265,10 @@ def run_player(
         driver = make_driver(args, selenium_api)
         wait = WebDriverWait(driver, args.action_timeout)
         driver.get(args.url)
-        click_start_game(driver, wait, By, EC)
+        click_start_game(driver, wait, By, EC, args)
     except Exception as exc:  # noqa: BLE001 - this is a failure-reporting harness
-        failures.append(Failure(player_id, "startup", repr(exc), traceback.format_exc()))
+        screenshot_path, html_path = save_failure_artifacts(driver, player_id, "startup")
+        failures.append(Failure(player_id, "startup", repr(exc), traceback.format_exc(), screenshot_path, html_path))
         if driver is not None:
             driver.quit()
         return samples, failures
@@ -241,16 +278,40 @@ def run_player(
             current_rate = read_current_interest_rate(driver, wait, By, EC)
             rate = choose_interest_rate(current_rate, args.rate_noise)
             started = time.perf_counter()
-            submit_turn(driver, wait, By, EC, Keys, rate)
+            submit_turn(driver, wait, By, EC, Keys, rate, args)
             samples.append(TurnSample(player_id, turn_number, rate, (time.perf_counter() - started) * 1000.0))
         except Exception as exc:  # noqa: BLE001 - keep other players running after a failure
-            failures.append(Failure(player_id, turn_number, repr(exc), traceback.format_exc()))
+            screenshot_path, html_path = save_failure_artifacts(driver, player_id, turn_number)
+            failures.append(Failure(player_id, turn_number, repr(exc), traceback.format_exc(), screenshot_path, html_path))
             break
         if args.delay > 0 and turn_number < args.turns:
             time.sleep(args.delay)
 
     driver.quit()
     return samples, failures
+
+
+def save_failure_artifacts(driver: Any, player_id: int, turn_number: int | str) -> tuple[str | None, str | None]:
+    if driver is None:
+        return None, None
+    artifacts_dir = Path(ARTIFACTS_DIR)
+    artifacts_dir.mkdir(exist_ok=True)
+    safe_turn = str(turn_number).replace("/", "_").replace("\\", "_")
+    screenshot_path = artifacts_dir / f"player_{player_id}_turn_{safe_turn}.png"
+    html_path = artifacts_dir / f"player_{player_id}_turn_{safe_turn}.html"
+    saved_screenshot: str | None = None
+    saved_html: str | None = None
+    try:
+        driver.save_screenshot(str(screenshot_path))
+        saved_screenshot = str(screenshot_path)
+    except Exception:
+        saved_screenshot = None
+    try:
+        html_path.write_text(driver.page_source, encoding="utf-8")
+        saved_html = str(html_path)
+    except Exception:
+        saved_html = None
+    return saved_screenshot, saved_html
 
 
 def print_failures(failures: Iterable[Failure]) -> None:
@@ -265,6 +326,10 @@ def print_failures(failures: Iterable[Failure]) -> None:
             f"\n--- Failure: player={failure.player_id} "
             f"turn={failure.turn_number} error={failure.error} ---"
         )
+        if failure.screenshot_path:
+            print(f"Screenshot: {failure.screenshot_path}")
+        if failure.html_path:
+            print(f"HTML: {failure.html_path}")
         print(failure.traceback.rstrip())
 
 
@@ -302,6 +367,7 @@ def main() -> int:
     print(f"Players: {args.players}")
     print(f"Turns per player: {args.turns}")
     print(f"Concurrent browser workers: {workers}")
+    print(f"Random think time: {not args.no_think_time and USE_RANDOM_THINK_TIME}")
     print(f"Completed turns: {completed_turns}/{expected_turns}")
     print(f"Total wall time: {elapsed:.3f}s")
     if elapsed > 0:
@@ -324,4 +390,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    exit_code = main()
+    if "spyder_kernels" in sys.modules:
+        print(f"Spyder run finished with exit code {exit_code}.")
+    else:
+        raise SystemExit(exit_code)

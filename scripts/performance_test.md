@@ -36,6 +36,12 @@ PAGE_LOAD_TIMEOUT_SECONDS = 60.0
 ACTION_TIMEOUT_SECONDS = 30.0
 SECONDS_BETWEEN_TURNS = 0.25
 RATE_NOISE = 0.25
+USE_RANDOM_THINK_TIME = True
+THINK_TIME_MEDIAN_SECONDS = 5.0
+THINK_TIME_SIGMA = 0.55
+THINK_TIME_MIN_SECONDS = 2.0
+THINK_TIME_MAX_SECONDS = 45.0
+ARTIFACTS_DIR = "performance_test_artifacts"
 ALLOW_FAILURES = False
 ```
 
@@ -51,9 +57,11 @@ Then press Run in Spyder.
 
 - `NUMBER_OF_PLAYERS`: total simulated players to run.
 - `TURNS_PER_PLAYER`: how many times each player chooses an interest rate and clicks **Next**.
-- `MAX_WORKERS`: how many browser players run at the same time. Start small, such as `3` or `5`, because each worker opens a browser.
-- `HEADLESS_BROWSER`: keep `True` for load testing. Set to `False` if you want to watch the browsers.
+- `MAX_WORKERS`: how many browser players run at the same time. Start small, such as `1`, `3`, or `5`, because each worker opens a browser.
+- `HEADLESS_BROWSER`: keep `True` for load testing. Set to `False` if you want to watch the browsers and debug why a click fails.
 - `RATE_NOISE`: how much randomness is added to the current interest rate each turn.
+- `USE_RANDOM_THINK_TIME`: adds human-like pauses before clicks and typing.
+- `THINK_TIME_MEDIAN_SECONDS`, `THINK_TIME_SIGMA`, `THINK_TIME_MIN_SECONDS`, and `THINK_TIME_MAX_SECONDS`: control the random wait distribution. The default is concentrated around fast actions of a few seconds with a long right tail.
 
 ## Running from a terminal
 
@@ -68,6 +76,44 @@ or:
 ```bash
 python scripts/performance_test.py --players 25 --turns 16 --max-workers 5
 ```
+
+## Understanding the report
+
+Example fields:
+
+- `Players`: how many simulated browser players were attempted.
+- `Turns per player`: how many turns each player should take.
+- `Concurrent browser workers`: how many browser players were running at once.
+- `Completed turns`: successful turns divided by expected turns. For example, `0/200` means none of the 200 expected turns completed.
+- `Throughput`: successful turns per second. If completed turns is `0`, throughput is also `0`.
+- `Turn response time statistics`: only appears when at least one turn succeeds.
+- `Failures/crashes`: number of players or turns that failed.
+
+If you see `turn=startup error=TimeoutException()`, Selenium opened the browser but
+could not find or click **Start Game** before `ACTION_TIMEOUT_SECONDS` expired. In
+that case the test never reached the interest-rate screen, so it is not evidence
+that Streamlit failed under turn load. Try these debugging steps:
+
+1. Set `NUMBER_OF_PLAYERS = 1` and `MAX_WORKERS = 1`.
+2. Set `HEADLESS_BROWSER = False` so you can watch the browser.
+3. Increase `ACTION_TIMEOUT_SECONDS` to `90.0` or `120.0` if the app is waking up slowly.
+4. Look in `performance_test_artifacts` for the saved screenshot and HTML from the failed browser.
+
+The `autoreload of typing_extensions failed` message shown by Spyder/IPython is
+not the load-test result. It is an IPython autoreload warning. You can usually
+ignore it, or disable autoreload in Spyder if it is distracting.
+
+## Human-like bot timing
+
+By default, bots do not click instantly. The script samples random think times
+from a log-normal distribution:
+
+- most pauses are fast, often in the 2-10 second range
+- some pauses are much longer because of the right tail
+- pauses are capped by `THINK_TIME_MAX_SECONDS`
+
+This is intended to be more realistic than every bot clicking at exactly the same
+interval.
 
 ## What it reports
 
