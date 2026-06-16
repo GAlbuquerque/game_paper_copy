@@ -29,14 +29,12 @@ values in the `TESTING PARAMETERS -- EDIT THESE VALUES WHEN RUNNING FROM SPYDER`
 TARGET_URL = "https://pirsgame.streamlit.app/"
 NUMBER_OF_PLAYERS = 1
 TURNS_PER_PLAYER = 16
-MAX_WORKERS = 1
 HEADLESS_BROWSER = False
 GAME_DIFFICULTY_LABEL = "Central Bank Governor"
 GAME_SCENARIO_LABEL = "Random"
 GAME_MANDATE_LABEL = "Inflation Target"
 PAGE_LOAD_TIMEOUT_SECONDS = 60.0
 ACTION_TIMEOUT_SECONDS = 120.0
-SECONDS_BETWEEN_TURNS = 0.25
 RATE_MOVE_LIMIT = 1.0
 USE_RANDOM_THINK_TIME = True
 THINK_TIME_MEDIAN_SECONDS = 5.0
@@ -57,14 +55,21 @@ Then press Run in Spyder.
 
 ## Important testing parameters
 
-- `NUMBER_OF_PLAYERS`: total simulated players to run. It is set to `1` by default so you can confirm the bot passes the menu before scaling up.
+- `NUMBER_OF_PLAYERS`: total simulated players to run. Every player runs concurrently, so this also controls the number of simultaneous browser players. It is set to `1` by default so you can confirm the bot passes the menu before scaling up.
 - `TURNS_PER_PLAYER`: how many times each player chooses an interest rate using a 50% keep / 50% old-rate-plus-or-minus rule and clicks **Next**.
-- `MAX_WORKERS`: how many browser players run at the same time. It is set to `1` by default for debugging; raise it after one player works.
 - `HEADLESS_BROWSER`: set to `False` by default so you can watch the browser pass the menu. Set it to `True` for larger load tests.
 - `GAME_DIFFICULTY_LABEL`, `GAME_SCENARIO_LABEL`, and `GAME_MANDATE_LABEL`: menu choices the bot selects before clicking **Start Game**. The script targets the Streamlit radio groups named Difficulty, Scenario, and Mandate, so these values should match the visible radio option text.
 - `RATE_MOVE_LIMIT`: when the bot changes rates, the largest allowed move up or down from the old rate. The bot has a 50% chance to keep the old rate and a 50% chance to choose old rate plus/minus up to this value, floored at 0.
 - `USE_RANDOM_THINK_TIME`: adds human-like pauses before clicks and typing.
 - `THINK_TIME_MEDIAN_SECONDS`, `THINK_TIME_SIGMA`, `THINK_TIME_MIN_SECONDS`, and `THINK_TIME_MAX_SECONDS`: control the random wait distribution. The default is concentrated around fast actions of a few seconds with a long right tail.
+
+## Loading behavior
+
+The script does not rely on a fixed number of seconds before acting. It waits for
+the browser document to finish loading, switches into the hosted Streamlit iframe,
+waits for the start-menu controls to be present, and after each click waits for
+the next game controls to be available. Random think time is only meant to mimic
+human hesitation after the page is ready; it is not used as the loading signal.
 
 ## Running from a terminal
 
@@ -77,7 +82,7 @@ python scripts/performance_test.py --players 10 --turns 16
 or:
 
 ```bash
-python scripts/performance_test.py --players 25 --turns 16 --max-workers 5
+python scripts/performance_test.py --players 25 --turns 16
 ```
 
 ## Understanding the report
@@ -132,6 +137,4 @@ The hosted Streamlit page wraps the actual app inside an iframe named `streamlit
 ## Notes
 
 This is heavier than the earlier HTTP-only test because it opens real browser
-sessions and interacts with the UI. For large tests, raise `NUMBER_OF_PLAYERS`
-gradually and keep `MAX_WORKERS` modest so your own computer does not run out of
-CPU or memory before the Streamlit server is actually stressed.
+sessions and interacts with the UI. For large tests, raise `NUMBER_OF_PLAYERS` gradually so your own computer does not run out of CPU or memory before the Streamlit server is actually stressed.

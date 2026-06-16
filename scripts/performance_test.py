@@ -38,11 +38,6 @@ NUMBER_OF_PLAYERS = 1
 # One turn means: read current rate, choose a new interest rate, type it, click Next.
 TURNS_PER_PLAYER = 16
 
-# MAX_WORKERS: how many browser windows run at the same time.
-# Example: NUMBER_OF_PLAYERS=20 and MAX_WORKERS=5 means 5 browsers run concurrently
-# until all 20 players have had a turn. More workers creates more load but uses more CPU/RAM.
-MAX_WORKERS = 1
-
 # HEADLESS_BROWSER: whether Chrome is visible.
 # False = open a normal visible Chrome window so you can watch/debug.
 # True = run Chrome invisibly in the background, which is better for larger load tests.
@@ -62,10 +57,6 @@ PAGE_LOAD_TIMEOUT_SECONDS = 60.0
 # This applies to menu options, Start Game, the interest-rate input, and Next.
 # If you see TimeoutException, increase this or run with HEADLESS_BROWSER=False to watch.
 ACTION_TIMEOUT_SECONDS = 120.0
-
-# SECONDS_BETWEEN_TURNS: fixed pause after each completed turn.
-# This is added on top of the random human-like think times below.
-SECONDS_BETWEEN_TURNS = 0.25
 
 # RATE_MOVE_LIMIT: maximum absolute move when the bot changes the current interest rate.
 # Example: 1.0 means a changed rate is old rate plus/minus up to 1 point.
@@ -126,7 +117,7 @@ def parse_args() -> argparse.Namespace:
             "Spyder: edit NUMBER_OF_PLAYERS near the top of this file and press Run.\n"
             "Terminal examples:\n"
             "  python scripts/performance_test.py --players 10\n"
-            "  python scripts/performance_test.py --players 25 --turns 16 --max-workers 5\n"
+            "  python scripts/performance_test.py --players 25 --turns 16\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -144,12 +135,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=TURNS_PER_PLAYER,
         help=f"turns each player takes after starting the game (default from code: {TURNS_PER_PLAYER})",
-    )
-    parser.add_argument(
-        "--max-workers",
-        type=int,
-        default=MAX_WORKERS,
-        help=f"maximum concurrent browser players (default from code: {MAX_WORKERS})",
     )
     parser.add_argument(
         "--difficulty",
@@ -182,12 +167,6 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=ACTION_TIMEOUT_SECONDS,
         help=f"button/input wait timeout in seconds (default from code: {ACTION_TIMEOUT_SECONDS})",
-    )
-    parser.add_argument(
-        "--delay",
-        type=float,
-        default=SECONDS_BETWEEN_TURNS,
-        help=f"seconds to wait between turns for each player (default from code: {SECONDS_BETWEEN_TURNS})",
     )
     parser.add_argument(
         "--rate-move-limit",
@@ -384,17 +363,34 @@ def find_clickable_text(driver: Any, By: Any, label: str) -> list[Any]:
     return []
 
 
+def wait_for_document_ready(driver: Any, wait: Any) -> None:
+    wait.until(lambda d: d.execute_script("return document.readyState") == "complete")
+
+
 def switch_to_streamlit_iframe(driver: Any, wait: Any, By: Any) -> None:
     iframe_xpath = "//iframe[@title='streamlitApp']"
     iframes = wait.until(lambda d: visible_elements(d, By, iframe_xpath))
     driver.switch_to.frame(iframes[0])
+    wait_for_document_ready(driver, wait)
+
+
+def wait_for_start_menu_ready(driver: Any, wait: Any, By: Any, args: argparse.Namespace) -> None:
+    wait.until(lambda d: find_clickable_text(d, By, args.difficulty))
+    wait.until(lambda d: find_clickable_text(d, By, args.scenario))
+    wait.until(lambda d: find_clickable_text(d, By, args.mandate))
+    wait.until(lambda d: find_clickable_text(d, By, "Start Game"))
+
+
+def wait_for_game_turn_ready(driver: Any, wait: Any, By: Any) -> None:
+    wait.until(lambda d: visible_elements(d, By, interest_rate_input_xpath()))
+    wait.until(lambda d: find_clickable_text(d, By, "Next"))
 
 
 def click_start_game(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
     start_buttons = wait.until(lambda d: find_clickable_text(d, By, "Start Game"))
     human_pause(args)
     robust_click(driver, start_buttons[0], ActionChains)
-    wait.until(lambda d: find_clickable_text(d, By, "Next") or visible_elements(d, By, interest_rate_input_xpath()))
+    wait_for_game_turn_ready(driver, wait, By)
 
 
 def read_current_interest_rate(driver: Any, wait: Any, By: Any, EC: Any) -> float:
@@ -442,7 +438,7 @@ def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChain
 
     next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
     robust_click(driver, next_buttons[0], ActionChains)
-    wait.until(lambda d: find_clickable_text(d, By, "Next"))
+    wait_for_game_turn_ready(driver, wait, By)
 
 
 def run_player(
@@ -459,7 +455,9 @@ def run_player(
         driver = make_driver(args, selenium_api)
         wait = WebDriverWait(driver, args.action_timeout)
         driver.get(args.url)
+        wait_for_document_ready(driver, wait)
         switch_to_streamlit_iframe(driver, wait, By)
+        wait_for_start_menu_ready(driver, wait, By, args)
         select_game_setup(driver, wait, By, ActionChains, args)
         click_start_game(driver, wait, By, ActionChains, args)
     except Exception as exc:  # noqa: BLE001 - this is a failure-reporting harness
@@ -480,8 +478,6 @@ def run_player(
             screenshot_path, html_path = save_failure_artifacts(driver, player_id, turn_number)
             failures.append(Failure(player_id, turn_number, repr(exc), traceback.format_exc(), screenshot_path, html_path))
             break
-        if args.delay > 0 and turn_number < args.turns:
-            time.sleep(args.delay)
 
     driver.quit()
     return samples, failures
@@ -537,15 +533,12 @@ def main() -> int:
         raise SystemExit("--players must be at least 1")
     if args.turns < 1:
         raise SystemExit("--turns must be at least 1")
-    if args.max_workers < 1:
-        raise SystemExit("--max-workers must be at least 1")
-
     selenium_api = require_selenium()
     all_samples: list[TurnSample] = []
     all_failures: list[Failure] = []
     suite_started = time.perf_counter()
 
-    workers = min(args.players, args.max_workers)
+    workers = args.players
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [
             executor.submit(run_player, player_id, args, selenium_api)
@@ -567,7 +560,7 @@ def main() -> int:
     print(f"Menu difficulty: {args.difficulty}")
     print(f"Menu scenario: {args.scenario}")
     print(f"Menu mandate: {args.mandate}")
-    print(f"Concurrent browser workers: {workers}")
+    print(f"Concurrent browser players: {workers}")
     print(f"Random think time: {not args.no_think_time and USE_RANDOM_THINK_TIME}")
     print(f"Completed turns: {completed_turns}/{expected_turns}")
     print(f"Total wall time: {elapsed:.3f}s")
