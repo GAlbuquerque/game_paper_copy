@@ -384,6 +384,12 @@ def find_clickable_text(driver: Any, By: Any, label: str) -> list[Any]:
     return []
 
 
+def switch_to_streamlit_iframe(driver: Any, wait: Any, By: Any) -> None:
+    iframe_xpath = "//iframe[@title='streamlitApp']"
+    iframes = wait.until(lambda d: visible_elements(d, By, iframe_xpath))
+    driver.switch_to.frame(iframes[0])
+
+
 def click_start_game(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
     start_buttons = wait.until(lambda d: find_clickable_text(d, By, "Start Game"))
     human_pause(args)
@@ -430,6 +436,7 @@ def run_player(
         driver = make_driver(args, selenium_api)
         wait = WebDriverWait(driver, args.action_timeout)
         driver.get(args.url)
+        switch_to_streamlit_iframe(driver, wait, By)
         select_game_setup(driver, wait, By, ActionChains, args)
         click_start_game(driver, wait, By, ActionChains, args)
     except Exception as exc:  # noqa: BLE001 - this is a failure-reporting harness

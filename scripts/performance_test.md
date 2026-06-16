@@ -127,7 +127,7 @@ The script reports:
 - response-time statistics for a turn: mean, median, p95, p99, min, max, and standard deviation
 - failures/crashes with full tracebacks and, when possible, screenshots/HTML saved under `scripts/performance_test_artifacts`
 
-The click helper is designed for Streamlit markup where the visible text may be inside nested elements such as `<p>Next</p>` rather than directly on a `<button>`.
+The hosted Streamlit page wraps the actual app inside an iframe named `streamlitApp`; the script switches into that iframe before looking for menu controls. The click helper is also designed for Streamlit markup where the visible text may be inside nested elements such as `<p>Next</p>` rather than directly on a `<button>`.
 
 ## Notes
 
