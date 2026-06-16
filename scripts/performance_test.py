@@ -426,11 +426,11 @@ def find_continue_playing_button(driver: Any, By: Any) -> list[Any]:
 
 def wait_for_game_turn_or_continue(driver: Any, wait: Any, By: Any, ActionChains: Any) -> None:
     def _ready_or_continue(d: Any) -> tuple[str, Any | None] | bool:
-        if visible_elements(d, By, interest_rate_input_xpath()) and find_clickable_text(d, By, "Next"):
-            return ("turn", None)
         continue_buttons = find_continue_playing_button(d, By)
         if continue_buttons:
             return ("continue", continue_buttons[0])
+        if visible_elements(d, By, interest_rate_input_xpath()) and find_clickable_text(d, By, "Next"):
+            return ("turn", None)
         return False
 
     state, element = wait.until(_ready_or_continue)
@@ -467,9 +467,10 @@ def is_stale_element_error(exc: Exception) -> bool:
 
 
 def replace_input_value(driver: Any, input_el: Any, value: float) -> None:
-    input_el.click()
     driver.execute_script(
         "const input = arguments[0];"
+        "input.scrollIntoView({block: 'center'});"
+        "input.focus();"
         "const value = Math.round(Number(arguments[1]) * 100) / 100;"
         "const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
         "setter.call(input, value);"
@@ -567,6 +568,7 @@ def run_player(
 
     for turn_number in range(1, args.turns + 1):
         try:
+            wait_for_game_turn_or_continue(driver, wait, By, ActionChains)
             current_rate = read_current_interest_rate(driver, wait, By, EC)
             rate = choose_interest_rate(current_rate, args.rate_move_limit)
             elapsed_seconds = submit_turn(driver, wait, By, EC, Keys, ActionChains, rate, args)
