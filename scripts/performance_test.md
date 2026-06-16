@@ -6,7 +6,7 @@ This script tests the hosted game at:
 https://pirsgame.streamlit.app/
 ```
 
-It opens real browser sessions, selects the game setup menu, clicks **Start Game**, finds the interest-rate input by its Streamlit aria label, chooses an interest rate, and clicks **Next** for each simulated turn.
+It opens real browser sessions, selects the game setup menu, clicks **Start Game**, finds the interest-rate input by its Streamlit aria label, chooses an interest rate using a 50% keep / 50% old-rate-plus-or-minus rule, and clicks **Next** for each simulated turn.
 
 ## Install once before running
 
@@ -37,7 +37,7 @@ GAME_MANDATE_LABEL = "Inflation Target"
 PAGE_LOAD_TIMEOUT_SECONDS = 60.0
 ACTION_TIMEOUT_SECONDS = 120.0
 SECONDS_BETWEEN_TURNS = 0.25
-RATE_NOISE = 0.25
+RATE_MOVE_LIMIT = 1.0
 USE_RANDOM_THINK_TIME = True
 THINK_TIME_MEDIAN_SECONDS = 5.0
 THINK_TIME_SIGMA = 0.55
@@ -58,11 +58,11 @@ Then press Run in Spyder.
 ## Important testing parameters
 
 - `NUMBER_OF_PLAYERS`: total simulated players to run. It is set to `1` by default so you can confirm the bot passes the menu before scaling up.
-- `TURNS_PER_PLAYER`: how many times each player chooses an interest rate and clicks **Next**.
+- `TURNS_PER_PLAYER`: how many times each player chooses an interest rate using a 50% keep / 50% old-rate-plus-or-minus rule and clicks **Next**.
 - `MAX_WORKERS`: how many browser players run at the same time. It is set to `1` by default for debugging; raise it after one player works.
 - `HEADLESS_BROWSER`: set to `False` by default so you can watch the browser pass the menu. Set it to `True` for larger load tests.
 - `GAME_DIFFICULTY_LABEL`, `GAME_SCENARIO_LABEL`, and `GAME_MANDATE_LABEL`: menu choices the bot selects before clicking **Start Game**. The script targets the Streamlit radio groups named Difficulty, Scenario, and Mandate, so these values should match the visible radio option text.
-- `RATE_NOISE`: how much randomness is added to the current interest rate each turn.
+- `RATE_MOVE_LIMIT`: when the bot changes rates, the largest allowed move up or down from the old rate. The bot has a 50% chance to keep the old rate and a 50% chance to choose old rate plus/minus up to this value, floored at 0.
 - `USE_RANDOM_THINK_TIME`: adds human-like pauses before clicks and typing.
 - `THINK_TIME_MEDIAN_SECONDS`, `THINK_TIME_SIGMA`, `THINK_TIME_MIN_SECONDS`, and `THINK_TIME_MAX_SECONDS`: control the random wait distribution. The default is concentrated around fast actions of a few seconds with a long right tail.
 

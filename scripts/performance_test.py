@@ -67,9 +67,9 @@ ACTION_TIMEOUT_SECONDS = 120.0
 # This is added on top of the random human-like think times below.
 SECONDS_BETWEEN_TURNS = 0.25
 
-# RATE_NOISE: how much randomness to add to the current interest rate.
-# Example: 0.25 means the bot usually chooses a rate close to the current one.
-RATE_NOISE = 0.25
+# RATE_MOVE_LIMIT: maximum absolute move when the bot changes the current interest rate.
+# Example: 1.0 means a changed rate is old rate plus/minus up to 1 point.
+RATE_MOVE_LIMIT = 1.0
 
 # USE_RANDOM_THINK_TIME: whether bots pause like humans before clicks/typing.
 # True is more realistic; False makes the test click as fast as Selenium can.
@@ -190,10 +190,10 @@ def parse_args() -> argparse.Namespace:
         help=f"seconds to wait between turns for each player (default from code: {SECONDS_BETWEEN_TURNS})",
     )
     parser.add_argument(
-        "--rate-noise",
+        "--rate-move-limit",
         type=float,
-        default=RATE_NOISE,
-        help=f"random policy-rate noise added each turn (default from code: {RATE_NOISE})",
+        default=RATE_MOVE_LIMIT,
+        help=f"maximum absolute policy-rate move when changing rates (default from code: {RATE_MOVE_LIMIT})",
     )
     parser.add_argument(
         "--no-think-time",
@@ -406,32 +406,38 @@ def read_current_interest_rate(driver: Any, wait: Any, By: Any, EC: Any) -> floa
         return 0.0
 
 
-def choose_interest_rate(current_rate: float, rate_noise: float) -> float:
-    return max(0.0, current_rate + random.gauss(0.0, rate_noise))
+def choose_interest_rate(current_rate: float, rate_move_limit: float) -> float:
+    if random.random() < 0.5:
+        return current_rate
+    move = random.uniform(-abs(rate_move_limit), abs(rate_move_limit))
+    return max(0.0, current_rate + move)
 
 
-def replace_input_value(driver: Any, input_el: Any, Keys: Any, value: str) -> None:
+def replace_input_value(driver: Any, input_el: Any, value: float) -> None:
     input_el.click()
-    input_el.clear()
-    input_el.send_keys(Keys.CONTROL + "a")
-    input_el.send_keys(Keys.BACKSPACE)
     driver.execute_script(
-        "arguments[0].value = '';"
-        "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
-        "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
+        "const input = arguments[0];"
+        "const value = Math.round(Number(arguments[1]) * 100) / 100;"
+        "const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+        "setter.call(input, value);"
+        "input.dispatchEvent(new Event('input', {bubbles: true}));"
+        "input.dispatchEvent(new Event('change', {bubbles: true}));",
         input_el,
+        value,
     )
-    input_el.send_keys(value)
 
 
 def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> None:
     input_el = wait.until(EC.element_to_be_clickable((By.XPATH, interest_rate_input_xpath())))
     human_pause(args)
-    rate_text = f"{rate:.2f}"
-    replace_input_value(driver, input_el, Keys, rate_text)
+    replace_input_value(driver, input_el, rate)
     actual_value = input_el.get_attribute("value") or ""
-    if actual_value != rate_text:
-        replace_input_value(driver, input_el, Keys, rate_text)
+    try:
+        actual_rate = float(actual_value)
+    except ValueError:
+        actual_rate = float("nan")
+    if abs(actual_rate - round(rate, 2)) > 0.001:
+        replace_input_value(driver, input_el, rate)
     human_pause(args)
 
     next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
@@ -466,7 +472,7 @@ def run_player(
     for turn_number in range(1, args.turns + 1):
         try:
             current_rate = read_current_interest_rate(driver, wait, By, EC)
-            rate = choose_interest_rate(current_rate, args.rate_noise)
+            rate = choose_interest_rate(current_rate, args.rate_move_limit)
             started = time.perf_counter()
             submit_turn(driver, wait, By, EC, Keys, ActionChains, rate, args)
             samples.append(TurnSample(player_id, turn_number, rate, (time.perf_counter() - started) * 1000.0))
