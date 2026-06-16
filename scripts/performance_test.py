@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.util
+import math
 import random
 import statistics
 import sys
@@ -78,13 +79,14 @@ START_CLICK_DELAY_STDEV_SECONDS = 0.5
 START_CLICK_DELAY_MIN_SECONDS = 0.5
 
 # TURN_THINK_TIME_*: delay before making each turn after the turn screen is ready.
-# This custom long-tail distribution has minimum 0.5s, median 2s, p90 near 60s,
-# and p99 near 240s. It is intentionally much slower-tailed than the start click.
+# This is a shifted log-normal distribution: min + lognormal(mu, sigma).
+# The shift keeps the lower bound exact, and mu is chosen so the median is exact.
+# Sigma is an honest least-squares fit to the requested p90 ~= 60s and p99 ~= 240s.
 TURN_THINK_TIME_MIN_SECONDS = 0.5
 TURN_THINK_TIME_MEDIAN_SECONDS = 2.0
-TURN_THINK_TIME_P90_SECONDS = 60.0
-TURN_THINK_TIME_P99_SECONDS = 240.0
-TURN_THINK_TIME_MAX_SECONDS = 300.0
+TURN_THINK_TIME_TARGET_P90_SECONDS = 60.0
+TURN_THINK_TIME_TARGET_P99_SECONDS = 240.0
+TURN_THINK_TIME_LOGNORMAL_SIGMA = 2.342
 
 # ARTIFACTS_DIR: folder where screenshots and HTML are saved when a bot fails.
 # Check this folder when Selenium cannot find a button or input.
@@ -256,47 +258,13 @@ def sample_start_click_delay(args: argparse.Namespace) -> float:
     return max(START_CLICK_DELAY_MIN_SECONDS, sampled)
 
 
-def interpolate_quantile(u: float, left_u: float, left_value: float, right_u: float, right_value: float) -> float:
-    fraction = (u - left_u) / (right_u - left_u)
-    return left_value + (right_value - left_value) * fraction
-
-
 def sample_turn_think_time(args: argparse.Namespace) -> float:
     if args.no_think_time or not USE_RANDOM_THINK_TIME:
         return 0.0
 
-    u = random.random()
-    if u <= 0.5:
-        return interpolate_quantile(
-            u,
-            0.0,
-            TURN_THINK_TIME_MIN_SECONDS,
-            0.5,
-            TURN_THINK_TIME_MEDIAN_SECONDS,
-        )
-    if u <= 0.9:
-        return interpolate_quantile(
-            u,
-            0.5,
-            TURN_THINK_TIME_MEDIAN_SECONDS,
-            0.9,
-            TURN_THINK_TIME_P90_SECONDS,
-        )
-    if u <= 0.99:
-        return interpolate_quantile(
-            u,
-            0.9,
-            TURN_THINK_TIME_P90_SECONDS,
-            0.99,
-            TURN_THINK_TIME_P99_SECONDS,
-        )
-    return interpolate_quantile(
-        u,
-        0.99,
-        TURN_THINK_TIME_P99_SECONDS,
-        1.0,
-        TURN_THINK_TIME_MAX_SECONDS,
-    )
+    shifted_median = TURN_THINK_TIME_MEDIAN_SECONDS - TURN_THINK_TIME_MIN_SECONDS
+    sampled = random.lognormvariate(math.log(shifted_median), TURN_THINK_TIME_LOGNORMAL_SIGMA)
+    return TURN_THINK_TIME_MIN_SECONDS + sampled
 
 
 def pause(seconds: float) -> None:
@@ -641,6 +609,8 @@ def main() -> int:
         raise SystemExit("--turns must be at least 1")
     if args.stale_element_retries < 1:
         raise SystemExit("--stale-element-retries must be at least 1")
+    if TURN_THINK_TIME_MEDIAN_SECONDS <= TURN_THINK_TIME_MIN_SECONDS:
+        raise SystemExit("TURN_THINK_TIME_MEDIAN_SECONDS must be greater than TURN_THINK_TIME_MIN_SECONDS")
     selenium_api = require_selenium()
     all_samples: list[TurnSample] = []
     all_failures: list[Failure] = []
