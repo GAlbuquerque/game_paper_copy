@@ -32,7 +32,7 @@ TARGET_URL = "https://pirsgame.streamlit.app/"
 
 # NUMBER_OF_PLAYERS: total fake players for the whole test.
 # Start with 1 so you can verify the bot reaches the game screen before scaling up.
-NUMBER_OF_PLAYERS = 20
+NUMBER_OF_PLAYERS = 1
 
 # TURNS_PER_PLAYER: how many game turns each fake player should play.
 # One turn means: read current rate, choose a new interest rate, type it, click Next.
@@ -41,7 +41,7 @@ TURNS_PER_PLAYER = 16
 # HEADLESS_BROWSER: whether Chrome is visible.
 # False = open a normal visible Chrome window so you can watch/debug.
 # True = run Chrome invisibly in the background, which is better for larger load tests.
-HEADLESS_BROWSER = True
+HEADLESS_BROWSER = False
 
 # GAME_*_LABEL: menu choices the bot clicks before pressing Start Game.
 # These strings must exactly match the labels you see in the Streamlit start menu.
@@ -86,8 +86,7 @@ TURN_THINK_TIME_MIN_SECONDS = 0.5
 TURN_THINK_TIME_MEDIAN_SECONDS = 2.0
 TURN_THINK_TIME_TARGET_P90_SECONDS = 60.0
 TURN_THINK_TIME_TARGET_P99_SECONDS = 240.0
-TURN_THINK_TIME_LOGNORMAL_SIGMA = 1.0
-#2.342
+TURN_THINK_TIME_LOGNORMAL_SIGMA = 2.342
 
 # ARTIFACTS_DIR: folder where screenshots and HTML are saved when a bot fails.
 # Check this folder when Selenium cannot find a button or input.
@@ -417,6 +416,29 @@ def wait_for_game_turn_ready(driver: Any, wait: Any, By: Any) -> None:
     wait.until(lambda d: find_clickable_text(d, By, "Next"))
 
 
+def find_continue_playing_button(driver: Any, By: Any) -> list[Any]:
+    for label in ("Continue Playing", "Continue playing"):
+        buttons = find_clickable_text(driver, By, label)
+        if buttons:
+            return buttons
+    return []
+
+
+def wait_for_game_turn_or_continue(driver: Any, wait: Any, By: Any, ActionChains: Any) -> None:
+    def _ready_or_continue(d: Any) -> tuple[str, Any | None] | bool:
+        if visible_elements(d, By, interest_rate_input_xpath()) and find_clickable_text(d, By, "Next"):
+            return ("turn", None)
+        continue_buttons = find_continue_playing_button(d, By)
+        if continue_buttons:
+            return ("continue", continue_buttons[0])
+        return False
+
+    state, element = wait.until(_ready_or_continue)
+    if state == "continue":
+        robust_click(driver, element, ActionChains)
+        wait_for_game_turn_ready(driver, wait, By)
+
+
 def click_start_game(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
     start_buttons = wait.until(lambda d: find_clickable_text(d, By, "Start Game"))
     start_click_pause(args)
@@ -506,12 +528,12 @@ def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChain
             next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
             started = time.perf_counter()
             robust_click(driver, next_buttons[0], ActionChains)
-            wait_for_game_turn_ready(driver, wait, By)
+            wait_for_game_turn_or_continue(driver, wait, By, ActionChains)
             return time.perf_counter() - started
         except Exception as exc:
             if not is_stale_element_error(exc) or attempt == args.stale_element_retries:
                 raise
-            wait_for_game_turn_ready(driver, wait, By)
+            wait_for_game_turn_or_continue(driver, wait, By, ActionChains)
             time.sleep(0.2 * attempt)
 
     raise RuntimeError("Could not click Next")
