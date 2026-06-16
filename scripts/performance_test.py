@@ -22,6 +22,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+
 # =============================================================================
 # TESTING PARAMETERS -- EDIT THESE VALUES WHEN RUNNING FROM SPYDER
 # =============================================================================
@@ -284,30 +286,48 @@ def make_driver(args: argparse.Namespace, selenium_api: tuple[Any, Any, Any, Any
 
 
 def button_xpath(label: str) -> str:
+    label_literal = xpath_literal(label)
     return (
-        "//button[normalize-space()=$label or .//*[normalize-space()=$label]]"
-        .replace("$label", repr(label))
+        f"//*[self::button or @role='button' or contains(@class, 'stButton')]"
+        f"[normalize-space()={label_literal} or .//*[normalize-space()={label_literal}]]"
     )
+
+
+def text_xpath(label: str) -> str:
+    label_literal = xpath_literal(label)
+    return f"//*[normalize-space()={label_literal}]"
+
+
+def interest_rate_input_xpath() -> str:
+    return "//input[@aria-label='New Interest Rate_invisible' or @type='text']"
 
 
 def visible_elements(driver: Any, By: Any, xpath: str) -> list[Any]:
     return [element for element in driver.find_elements(By.XPATH, xpath) if element.is_displayed()]
 
 
+def nearest_click_target(driver: Any, element: Any) -> Any:
+    return driver.execute_script(
+        "return arguments[0].closest('button, label, [role=\"radio\"], [role=\"button\"]') || arguments[0];",
+        element,
+    )
+
+
 def robust_click(driver: Any, element: Any, ActionChains: Any) -> None:
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+    click_target = nearest_click_target(driver, element)
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", click_target)
     time.sleep(0.2)
     try:
-        element.click()
+        click_target.click()
         return
     except Exception:
         pass
     try:
-        ActionChains(driver).move_to_element(element).pause(0.2).click().perform()
+        ActionChains(driver).move_to_element(click_target).pause(0.2).click().perform()
         return
     except Exception:
         pass
-    driver.execute_script("arguments[0].click();", element)
+    driver.execute_script("arguments[0].click();", click_target)
 
 
 def xpath_literal(value: str) -> str:
@@ -356,15 +376,23 @@ def select_game_setup(driver: Any, wait: Any, By: Any, ActionChains: Any, args: 
         human_pause(args)
 
 
+def find_clickable_text(driver: Any, By: Any, label: str) -> list[Any]:
+    for xpath in (button_xpath(label), text_xpath(label)):
+        elements = visible_elements(driver, By, xpath)
+        if elements:
+            return elements
+    return []
+
+
 def click_start_game(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
-    start_buttons = wait.until(lambda d: visible_elements(d, By, button_xpath("Start Game")))
+    start_buttons = wait.until(lambda d: find_clickable_text(d, By, "Start Game"))
     human_pause(args)
     robust_click(driver, start_buttons[0], ActionChains)
-    wait.until(lambda d: visible_elements(d, By, button_xpath("Next")) or visible_elements(d, By, "//input"))
+    wait.until(lambda d: find_clickable_text(d, By, "Next") or visible_elements(d, By, interest_rate_input_xpath()))
 
 
 def read_current_interest_rate(driver: Any, wait: Any, By: Any, EC: Any) -> float:
-    input_el = wait.until(EC.presence_of_element_located((By.XPATH, "//input")))
+    input_el = wait.until(EC.presence_of_element_located((By.XPATH, interest_rate_input_xpath())))
     raw_value = input_el.get_attribute("value") or "0"
     try:
         return max(0.0, float(raw_value))
@@ -377,15 +405,15 @@ def choose_interest_rate(current_rate: float, rate_noise: float) -> float:
 
 
 def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> None:
-    input_el = wait.until(EC.element_to_be_clickable((By.XPATH, "//input")))
+    input_el = wait.until(EC.element_to_be_clickable((By.XPATH, interest_rate_input_xpath())))
     human_pause(args)
     input_el.send_keys(Keys.CONTROL, "a")
     input_el.send_keys(f"{rate:.2f}")
     human_pause(args)
 
-    next_button = wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
-    robust_click(driver, next_button, ActionChains)
-    wait.until(EC.element_to_be_clickable((By.XPATH, button_xpath("Next"))))
+    next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
+    robust_click(driver, next_buttons[0], ActionChains)
+    wait.until(lambda d: find_clickable_text(d, By, "Next"))
 
 
 def run_player(
@@ -433,6 +461,8 @@ def save_failure_artifacts(driver: Any, player_id: int, turn_number: int | str) 
     if driver is None:
         return None, None
     artifacts_dir = Path(ARTIFACTS_DIR)
+    if not artifacts_dir.is_absolute():
+        artifacts_dir = SCRIPT_DIR / artifacts_dir
     artifacts_dir.mkdir(exist_ok=True)
     safe_turn = str(turn_number).replace("/", "_").replace("\\", "_")
     screenshot_path = artifacts_dir / f"player_{player_id}_turn_{safe_turn}.png"

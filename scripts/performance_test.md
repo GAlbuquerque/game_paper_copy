@@ -6,7 +6,7 @@ This script tests the hosted game at:
 https://pirsgame.streamlit.app/
 ```
 
-It opens real browser sessions, selects the game setup menu, clicks **Start Game**, chooses an interest rate, and clicks **Next** for each simulated turn.
+It opens real browser sessions, selects the game setup menu, clicks **Start Game**, finds the interest-rate input by its Streamlit aria label, chooses an interest rate, and clicks **Next** for each simulated turn.
 
 ## Install once before running
 
@@ -100,7 +100,7 @@ that Streamlit failed under turn load. Try these debugging steps:
 1. Set `NUMBER_OF_PLAYERS = 1` and `MAX_WORKERS = 1`.
 2. Keep `HEADLESS_BROWSER = False` so you can watch the browser.
 3. Keep `ACTION_TIMEOUT_SECONDS = 120.0` if the app is waking up slowly.
-4. Look in `performance_test_artifacts` for the saved screenshot and HTML from the failed browser.
+4. Look in `scripts/performance_test_artifacts` for the saved screenshot and HTML from the failed browser. The folder is created beside `performance_test.py`, even when Spyder runs with a different working directory.
 
 The `autoreload of typing_extensions failed` message shown by Spyder/IPython is
 not the load-test result. It is an IPython autoreload warning. You can usually
@@ -125,7 +125,9 @@ The script reports:
 - completed turns and total wall time
 - throughput in turns per second
 - response-time statistics for a turn: mean, median, p95, p99, min, max, and standard deviation
-- failures/crashes with full tracebacks
+- failures/crashes with full tracebacks and, when possible, screenshots/HTML saved under `scripts/performance_test_artifacts`
+
+The click helper is designed for Streamlit markup where the visible text may be inside nested elements such as `<p>Next</p>` rather than directly on a `<button>`.
 
 ## Notes
 
