@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.util
-import math
 import random
 import statistics
 import sys
@@ -72,21 +71,20 @@ RATE_MOVE_LIMIT = 1.0
 # True is more realistic; False makes the test click as fast as Selenium can.
 USE_RANDOM_THINK_TIME = True
 
-# THINK_TIME_MEDIAN_SECONDS: typical human pause length.
-# With the defaults, many pauses land around a few seconds.
-THINK_TIME_MEDIAN_SECONDS = 5.0
+# START_CLICK_DELAY_*: delay before clicking Start Game after the menu is ready.
+# This models a quick human start click: normal(mean=2, stdev=0.5), floored at 0.5.
+START_CLICK_DELAY_MEAN_SECONDS = 2.0
+START_CLICK_DELAY_STDEV_SECONDS = 0.5
+START_CLICK_DELAY_MIN_SECONDS = 0.5
 
-# THINK_TIME_SIGMA: controls how spread out the random pauses are.
-# Larger values create more very-slow users in the long right tail.
-THINK_TIME_SIGMA = 0.55
-
-# THINK_TIME_MIN_SECONDS: shortest allowed human-like pause.
-# This keeps bots from clicking unrealistically instantly.
-THINK_TIME_MIN_SECONDS = 2.0
-
-# THINK_TIME_MAX_SECONDS: longest allowed human-like pause.
-# This caps the long tail so one bot does not wait forever.
-THINK_TIME_MAX_SECONDS = 45.0
+# TURN_THINK_TIME_*: delay before making each turn after the turn screen is ready.
+# This custom long-tail distribution has minimum 0.5s, median 2s, p90 near 60s,
+# and p99 near 240s. It is intentionally much slower-tailed than the start click.
+TURN_THINK_TIME_MIN_SECONDS = 0.5
+TURN_THINK_TIME_MEDIAN_SECONDS = 2.0
+TURN_THINK_TIME_P90_SECONDS = 60.0
+TURN_THINK_TIME_P99_SECONDS = 240.0
+TURN_THINK_TIME_MAX_SECONDS = 300.0
 
 # ARTIFACTS_DIR: folder where screenshots and HTML are saved when a bot fails.
 # Check this folder when Selenium cannot find a button or input.
@@ -103,7 +101,7 @@ class TurnSample:
     player_id: int
     turn_number: int
     interest_rate: float
-    elapsed_ms: float
+    elapsed_seconds: float
 
 
 @dataclass
@@ -236,32 +234,82 @@ def percentile(values: list[float], pct: float) -> float:
 
 
 def summarize_response_times(samples: list[TurnSample]) -> dict[str, float]:
-    elapsed_values = [sample.elapsed_ms for sample in samples]
+    elapsed_values = [sample.elapsed_seconds for sample in samples]
     if not elapsed_values:
         return {}
     return {
         "count": float(len(elapsed_values)),
-        "mean_ms": statistics.fmean(elapsed_values),
-        "median_ms": percentile(elapsed_values, 50),
-        "p95_ms": percentile(elapsed_values, 95),
-        "p99_ms": percentile(elapsed_values, 99),
-        "min_ms": min(elapsed_values),
-        "max_ms": max(elapsed_values),
-        "stdev_ms": statistics.stdev(elapsed_values) if len(elapsed_values) > 1 else 0.0,
+        "mean_s": statistics.fmean(elapsed_values),
+        "median_s": percentile(elapsed_values, 50),
+        "p95_s": percentile(elapsed_values, 95),
+        "p99_s": percentile(elapsed_values, 99),
+        "min_s": min(elapsed_values),
+        "max_s": max(elapsed_values),
+        "stdev_s": statistics.stdev(elapsed_values) if len(elapsed_values) > 1 else 0.0,
     }
 
 
-def sample_think_time(args: argparse.Namespace) -> float:
+def sample_start_click_delay(args: argparse.Namespace) -> float:
     if args.no_think_time or not USE_RANDOM_THINK_TIME:
         return 0.0
-    sampled = random.lognormvariate(math.log(THINK_TIME_MEDIAN_SECONDS), THINK_TIME_SIGMA)
-    return min(THINK_TIME_MAX_SECONDS, max(THINK_TIME_MIN_SECONDS, sampled))
+    sampled = random.normalvariate(START_CLICK_DELAY_MEAN_SECONDS, START_CLICK_DELAY_STDEV_SECONDS)
+    return max(START_CLICK_DELAY_MIN_SECONDS, sampled)
 
 
-def human_pause(args: argparse.Namespace) -> None:
-    pause_seconds = sample_think_time(args)
-    if pause_seconds > 0:
-        time.sleep(pause_seconds)
+def interpolate_quantile(u: float, left_u: float, left_value: float, right_u: float, right_value: float) -> float:
+    fraction = (u - left_u) / (right_u - left_u)
+    return left_value + (right_value - left_value) * fraction
+
+
+def sample_turn_think_time(args: argparse.Namespace) -> float:
+    if args.no_think_time or not USE_RANDOM_THINK_TIME:
+        return 0.0
+
+    u = random.random()
+    if u <= 0.5:
+        return interpolate_quantile(
+            u,
+            0.0,
+            TURN_THINK_TIME_MIN_SECONDS,
+            0.5,
+            TURN_THINK_TIME_MEDIAN_SECONDS,
+        )
+    if u <= 0.9:
+        return interpolate_quantile(
+            u,
+            0.5,
+            TURN_THINK_TIME_MEDIAN_SECONDS,
+            0.9,
+            TURN_THINK_TIME_P90_SECONDS,
+        )
+    if u <= 0.99:
+        return interpolate_quantile(
+            u,
+            0.9,
+            TURN_THINK_TIME_P90_SECONDS,
+            0.99,
+            TURN_THINK_TIME_P99_SECONDS,
+        )
+    return interpolate_quantile(
+        u,
+        0.99,
+        TURN_THINK_TIME_P99_SECONDS,
+        1.0,
+        TURN_THINK_TIME_MAX_SECONDS,
+    )
+
+
+def pause(seconds: float) -> None:
+    if seconds > 0:
+        time.sleep(seconds)
+
+
+def start_click_pause(args: argparse.Namespace) -> None:
+    pause(sample_start_click_delay(args))
+
+
+def turn_think_pause(args: argparse.Namespace) -> None:
+    pause(sample_turn_think_time(args))
 
 
 def make_driver(args: argparse.Namespace, selenium_api: tuple[Any, Any, Any, Any, Any, Any, Any, Any]) -> Any:
@@ -367,7 +415,6 @@ def select_game_setup(driver: Any, wait: Any, By: Any, ActionChains: Any, args: 
         ("Mandate", args.mandate),
     ):
         select_radio_option(driver, wait, By, ActionChains, group_label, option_label)
-        human_pause(args)
 
 
 def find_clickable_text(driver: Any, By: Any, label: str) -> list[Any]:
@@ -403,7 +450,7 @@ def wait_for_game_turn_ready(driver: Any, wait: Any, By: Any) -> None:
 
 def click_start_game(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
     start_buttons = wait.until(lambda d: find_clickable_text(d, By, "Start Game"))
-    human_pause(args)
+    start_click_pause(args)
     robust_click(driver, start_buttons[0], ActionChains)
     wait_for_game_turn_ready(driver, wait, By)
 
@@ -481,22 +528,24 @@ def set_interest_rate_with_retries(driver: Any, wait: Any, By: Any, EC: Any, rat
     raise RuntimeError(f"Could not set interest-rate input to {rounded_rate:.2f}")
 
 
-def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> None:
-    human_pause(args)
+def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> float:
+    turn_think_pause(args)
     set_interest_rate_with_retries(driver, wait, By, EC, rate, args)
-    human_pause(args)
 
     for attempt in range(1, args.stale_element_retries + 1):
         try:
             next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
+            started = time.perf_counter()
             robust_click(driver, next_buttons[0], ActionChains)
             wait_for_game_turn_ready(driver, wait, By)
-            return
+            return time.perf_counter() - started
         except Exception as exc:
             if not is_stale_element_error(exc) or attempt == args.stale_element_retries:
                 raise
             wait_for_game_turn_ready(driver, wait, By)
             time.sleep(0.2 * attempt)
+
+    raise RuntimeError("Could not click Next")
 
 
 def run_player(
@@ -529,9 +578,8 @@ def run_player(
         try:
             current_rate = read_current_interest_rate(driver, wait, By, EC)
             rate = choose_interest_rate(current_rate, args.rate_move_limit)
-            started = time.perf_counter()
-            submit_turn(driver, wait, By, EC, Keys, ActionChains, rate, args)
-            samples.append(TurnSample(player_id, turn_number, rate, (time.perf_counter() - started) * 1000.0))
+            elapsed_seconds = submit_turn(driver, wait, By, EC, Keys, ActionChains, rate, args)
+            samples.append(TurnSample(player_id, turn_number, rate, elapsed_seconds))
         except Exception as exc:  # noqa: BLE001 - keep other players running after a failure
             screenshot_path, html_path = save_failure_artifacts(driver, player_id, turn_number)
             failures.append(Failure(player_id, turn_number, repr(exc), traceback.format_exc(), screenshot_path, html_path))
@@ -630,7 +678,7 @@ def main() -> int:
 
     stats = summarize_response_times(all_samples)
     if stats:
-        print("\nTurn response time statistics (milliseconds from Next click to ready):")
+        print("\nTurn response time statistics (seconds from Next click to ready):")
         for key, value in stats.items():
             if key == "count":
                 print(f"  {key}: {int(value)}")

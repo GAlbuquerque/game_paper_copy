@@ -38,10 +38,14 @@ ACTION_TIMEOUT_SECONDS = 120.0
 STALE_ELEMENT_RETRIES = 3
 RATE_MOVE_LIMIT = 1.0
 USE_RANDOM_THINK_TIME = True
-THINK_TIME_MEDIAN_SECONDS = 5.0
-THINK_TIME_SIGMA = 0.55
-THINK_TIME_MIN_SECONDS = 2.0
-THINK_TIME_MAX_SECONDS = 45.0
+START_CLICK_DELAY_MEAN_SECONDS = 2.0
+START_CLICK_DELAY_STDEV_SECONDS = 0.5
+START_CLICK_DELAY_MIN_SECONDS = 0.5
+TURN_THINK_TIME_MIN_SECONDS = 0.5
+TURN_THINK_TIME_MEDIAN_SECONDS = 2.0
+TURN_THINK_TIME_P90_SECONDS = 60.0
+TURN_THINK_TIME_P99_SECONDS = 240.0
+TURN_THINK_TIME_MAX_SECONDS = 300.0
 ARTIFACTS_DIR = "performance_test_artifacts"
 ALLOW_FAILURES = False
 ```
@@ -63,7 +67,8 @@ Then press Run in Spyder.
 - `STALE_ELEMENT_RETRIES`: how many times Selenium re-finds a widget if Streamlit redraws the page after Selenium first found it. This protects against `StaleElementReferenceException`, where the input or button still appears on screen but Selenium's old reference points to a replaced widget.
 - `RATE_MOVE_LIMIT`: when the bot changes rates, the largest allowed move up or down from the old rate. The bot has a 50% chance to keep the old rate and a 50% chance to choose old rate plus/minus up to this value, floored at 0.
 - `USE_RANDOM_THINK_TIME`: adds human-like pauses before clicks and typing.
-- `THINK_TIME_MEDIAN_SECONDS`, `THINK_TIME_SIGMA`, `THINK_TIME_MIN_SECONDS`, and `THINK_TIME_MAX_SECONDS`: control the random wait distribution. The default is concentrated around fast actions of a few seconds with a long right tail.
+- `START_CLICK_DELAY_MEAN_SECONDS`, `START_CLICK_DELAY_STDEV_SECONDS`, and `START_CLICK_DELAY_MIN_SECONDS`: control the pause before clicking **Start Game** after the menu is ready. The default is approximately normal with mean 2 seconds and standard deviation 0.5 seconds, floored at 0.5 seconds.
+- `TURN_THINK_TIME_MIN_SECONDS`, `TURN_THINK_TIME_MEDIAN_SECONDS`, `TURN_THINK_TIME_P90_SECONDS`, `TURN_THINK_TIME_P99_SECONDS`, and `TURN_THINK_TIME_MAX_SECONDS`: control the turn-to-turn human delay. The default has a minimum of 0.5 seconds, median of 2 seconds, 90th percentile near 60 seconds, and 99th percentile near 240 seconds.
 
 ## Loading behavior
 
@@ -97,7 +102,8 @@ Example fields:
 - `Stale element retries`: how many times Selenium will re-find a Streamlit widget after the page redraws it.
 - `Completed turns`: successful turns divided by expected turns. For example, `0/200` means none of the 200 expected turns completed.
 - `Throughput`: successful turns per second. If completed turns is `0`, throughput is also `0`.
-- `Turn response time statistics`: only appears when at least one turn succeeds.
+- `Total wall time`: the real elapsed clock time from the start of the whole test until the script finishes. With multiple players, this is not the sum of each player's time; it is how long you waited in real life.
+- `Turn response time statistics`: only appears when at least one turn succeeds. These values are reported in seconds.
 - `Failures/crashes`: number of players or turns that failed.
 
 If you see `turn=startup error=TimeoutException()`, Selenium opened the browser but
@@ -116,12 +122,10 @@ ignore it, or disable autoreload in Spyder if it is distracting.
 
 ## Human-like bot timing
 
-By default, bots do not click instantly. The script samples random think times
-from a log-normal distribution:
+By default, bots do not click instantly:
 
-- most pauses are fast, often in the 2-10 second range
-- some pauses are much longer because of the right tail
-- pauses are capped by `THINK_TIME_MAX_SECONDS`
+- Before clicking **Start Game**, the bot uses a quick normal delay with mean 2 seconds and standard deviation 0.5 seconds, bounded below at 0.5 seconds.
+- Between turns, the bot uses a custom long-tail delay with minimum 0.5 seconds, median 2 seconds, 90th percentile near 60 seconds, and 99th percentile near 240 seconds.
 
 This is intended to be more realistic than every bot clicking at exactly the same
 interval.
@@ -132,7 +136,7 @@ The script reports:
 
 - completed turns and total wall time
 - throughput in turns per second
-- response-time statistics for a turn: mean, median, p95, p99, min, max, and standard deviation
+- response-time statistics for a turn in seconds: mean, median, p95, p99, min, max, and standard deviation
 - failures/crashes with full tracebacks and, when possible, screenshots/HTML saved under `scripts/performance_test_artifacts`
 
 The hosted Streamlit page wraps the actual app inside an iframe named `streamlitApp`; the script switches into that iframe before looking for menu controls. The click helper is also designed for Streamlit markup where the visible text may be inside nested elements such as `<p>Next</p>` rather than directly on a `<button>`.
