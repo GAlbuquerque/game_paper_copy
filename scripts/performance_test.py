@@ -310,15 +310,49 @@ def robust_click(driver: Any, element: Any, ActionChains: Any) -> None:
     driver.execute_script("arguments[0].click();", element)
 
 
+def xpath_literal(value: str) -> str:
+    if "'" not in value:
+        return f"'{value}'"
+    if '"' not in value:
+        return f'"{value}"'
+    return "concat(" + ", \"'\", ".join(f"'{part}'" for part in value.split("'")) + ")"
+
+
 def click_visible_text(driver: Any, wait: Any, By: Any, ActionChains: Any, label: str) -> None:
-    xpath = f"//*[normalize-space()={label!r}]"
+    label_literal = xpath_literal(label)
+    xpath = f"//*[normalize-space()={label_literal}]"
     elements = wait.until(lambda d: visible_elements(d, By, xpath))
     robust_click(driver, elements[0], ActionChains)
 
 
+def select_radio_option(driver: Any, wait: Any, By: Any, ActionChains: Any, group_label: str, option_label: str) -> None:
+    group_literal = xpath_literal(group_label)
+    option_literal = xpath_literal(option_label)
+    radio_xpath = (
+        f"//*[@role='radiogroup' and (@aria-label={group_literal} or .//*[normalize-space()={group_literal}])]"
+        f"//*[(@role='radio' or self::label) and (normalize-space()={option_literal} or .//*[normalize-space()={option_literal}])]"
+    )
+    label_fallback_xpath = f"//label[normalize-space()={option_literal} or .//*[normalize-space()={option_literal}]]"
+    generic_fallback_xpath = f"//*[normalize-space()={option_literal}]"
+
+    def _find_option(d: Any) -> list[Any]:
+        for xpath in (radio_xpath, label_fallback_xpath, generic_fallback_xpath):
+            elements = visible_elements(d, By, xpath)
+            if elements:
+                return elements
+        return []
+
+    elements = wait.until(_find_option)
+    robust_click(driver, elements[0], ActionChains)
+
+
 def select_game_setup(driver: Any, wait: Any, By: Any, ActionChains: Any, args: argparse.Namespace) -> None:
-    for label in (args.difficulty, args.scenario, args.mandate):
-        click_visible_text(driver, wait, By, ActionChains, label)
+    for group_label, option_label in (
+        ("Difficulty", args.difficulty),
+        ("Scenario", args.scenario),
+        ("Mandate", args.mandate),
+    ):
+        select_radio_option(driver, wait, By, ActionChains, group_label, option_label)
         human_pause(args)
 
 

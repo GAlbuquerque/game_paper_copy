@@ -61,7 +61,7 @@ Then press Run in Spyder.
 - `TURNS_PER_PLAYER`: how many times each player chooses an interest rate and clicks **Next**.
 - `MAX_WORKERS`: how many browser players run at the same time. It is set to `1` by default for debugging; raise it after one player works.
 - `HEADLESS_BROWSER`: set to `False` by default so you can watch the browser pass the menu. Set it to `True` for larger load tests.
-- `GAME_DIFFICULTY_LABEL`, `GAME_SCENARIO_LABEL`, and `GAME_MANDATE_LABEL`: menu choices the bot selects before clicking **Start Game**.
+- `GAME_DIFFICULTY_LABEL`, `GAME_SCENARIO_LABEL`, and `GAME_MANDATE_LABEL`: menu choices the bot selects before clicking **Start Game**. The script targets the Streamlit radio groups named Difficulty, Scenario, and Mandate, so these values should match the visible radio option text.
 - `RATE_NOISE`: how much randomness is added to the current interest rate each turn.
 - `USE_RANDOM_THINK_TIME`: adds human-like pauses before clicks and typing.
 - `THINK_TIME_MEDIAN_SECONDS`, `THINK_TIME_SIGMA`, `THINK_TIME_MIN_SECONDS`, and `THINK_TIME_MAX_SECONDS`: control the random wait distribution. The default is concentrated around fast actions of a few seconds with a long right tail.
