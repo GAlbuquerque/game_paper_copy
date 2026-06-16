@@ -303,6 +303,11 @@ def button_xpath(label: str) -> str:
     )
 
 
+def exact_button_xpath(label: str) -> str:
+    label_literal = xpath_literal(label)
+    return f"//button[normalize-space()={label_literal} or .//*[normalize-space()={label_literal}]]"
+
+
 def text_xpath(label: str) -> str:
     label_literal = xpath_literal(label)
     return f"//*[normalize-space()={label_literal}]"
@@ -314,6 +319,14 @@ def interest_rate_input_xpath() -> str:
 
 def visible_elements(driver: Any, By: Any, xpath: str) -> list[Any]:
     return [element for element in driver.find_elements(By.XPATH, xpath) if element.is_displayed()]
+
+
+def visible_enabled_elements(driver: Any, By: Any, xpath: str) -> list[Any]:
+    return [
+        element
+        for element in driver.find_elements(By.XPATH, xpath)
+        if element.is_displayed() and element.is_enabled()
+    ]
 
 
 def nearest_click_target(driver: Any, element: Any) -> Any:
@@ -386,6 +399,10 @@ def select_game_setup(driver: Any, wait: Any, By: Any, ActionChains: Any, args: 
 
 
 def find_clickable_text(driver: Any, By: Any, label: str) -> list[Any]:
+    exact_buttons = visible_enabled_elements(driver, By, exact_button_xpath(label))
+    if exact_buttons:
+        return exact_buttons
+
     for xpath in (button_xpath(label), text_xpath(label)):
         elements = visible_elements(driver, By, xpath)
         if elements:
@@ -418,7 +435,7 @@ def wait_for_game_turn_ready(driver: Any, wait: Any, By: Any) -> None:
 
 def find_continue_playing_button(driver: Any, By: Any) -> list[Any]:
     for label in ("Continue Playing", "Continue playing"):
-        buttons = find_clickable_text(driver, By, label)
+        buttons = visible_enabled_elements(driver, By, exact_button_xpath(label))
         if buttons:
             return buttons
     return []
