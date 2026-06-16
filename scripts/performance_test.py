@@ -32,7 +32,7 @@ TARGET_URL = "https://pirsgame.streamlit.app/"
 
 # NUMBER_OF_PLAYERS: total fake players for the whole test.
 # Start with 1 so you can verify the bot reaches the game screen before scaling up.
-NUMBER_OF_PLAYERS = 1
+NUMBER_OF_PLAYERS = 20
 
 # TURNS_PER_PLAYER: how many game turns each fake player should play.
 # One turn means: read current rate, choose a new interest rate, type it, click Next.
@@ -41,7 +41,7 @@ TURNS_PER_PLAYER = 16
 # HEADLESS_BROWSER: whether Chrome is visible.
 # False = open a normal visible Chrome window so you can watch/debug.
 # True = run Chrome invisibly in the background, which is better for larger load tests.
-HEADLESS_BROWSER = False
+HEADLESS_BROWSER = True
 
 # GAME_*_LABEL: menu choices the bot clicks before pressing Start Game.
 # These strings must exactly match the labels you see in the Streamlit start menu.
@@ -86,7 +86,8 @@ TURN_THINK_TIME_MIN_SECONDS = 0.5
 TURN_THINK_TIME_MEDIAN_SECONDS = 2.0
 TURN_THINK_TIME_TARGET_P90_SECONDS = 60.0
 TURN_THINK_TIME_TARGET_P99_SECONDS = 240.0
-TURN_THINK_TIME_LOGNORMAL_SIGMA = 2.342
+TURN_THINK_TIME_LOGNORMAL_SIGMA = 1.0
+#2.342
 
 # ARTIFACTS_DIR: folder where screenshots and HTML are saved when a bot fails.
 # Check this folder when Selenium cannot find a button or input.
