@@ -410,11 +410,28 @@ def choose_interest_rate(current_rate: float, rate_noise: float) -> float:
     return max(0.0, current_rate + random.gauss(0.0, rate_noise))
 
 
+def replace_input_value(driver: Any, input_el: Any, Keys: Any, value: str) -> None:
+    input_el.click()
+    input_el.clear()
+    input_el.send_keys(Keys.CONTROL + "a")
+    input_el.send_keys(Keys.BACKSPACE)
+    driver.execute_script(
+        "arguments[0].value = '';"
+        "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
+        "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
+        input_el,
+    )
+    input_el.send_keys(value)
+
+
 def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> None:
     input_el = wait.until(EC.element_to_be_clickable((By.XPATH, interest_rate_input_xpath())))
     human_pause(args)
-    input_el.send_keys(Keys.CONTROL, "a")
-    input_el.send_keys(f"{rate:.2f}")
+    rate_text = f"{rate:.2f}"
+    replace_input_value(driver, input_el, Keys, rate_text)
+    actual_value = input_el.get_attribute("value") or ""
+    if actual_value != rate_text:
+        replace_input_value(driver, input_el, Keys, rate_text)
     human_pause(args)
 
     next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
