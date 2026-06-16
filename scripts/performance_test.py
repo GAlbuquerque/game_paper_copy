@@ -58,6 +58,12 @@ PAGE_LOAD_TIMEOUT_SECONDS = 60.0
 # If you see TimeoutException, increase this or run with HEADLESS_BROWSER=False to watch.
 ACTION_TIMEOUT_SECONDS = 120.0
 
+# STALE_ELEMENT_RETRIES: how many times the bot re-finds an input/button if
+# Streamlit redraws the page between finding the element and clicking it.
+# StaleElementReferenceException means Selenium had an old copy of a widget that
+# Streamlit replaced with a new, visually identical widget.
+STALE_ELEMENT_RETRIES = 3
+
 # RATE_MOVE_LIMIT: maximum absolute move when the bot changes the current interest rate.
 # Example: 1.0 means a changed rate is old rate plus/minus up to 1 point.
 RATE_MOVE_LIMIT = 1.0
@@ -167,6 +173,15 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=ACTION_TIMEOUT_SECONDS,
         help=f"button/input wait timeout in seconds (default from code: {ACTION_TIMEOUT_SECONDS})",
+    )
+    parser.add_argument(
+        "--stale-element-retries",
+        type=int,
+        default=STALE_ELEMENT_RETRIES,
+        help=(
+            "times to re-find Streamlit inputs/buttons after a stale element "
+            f"(default from code: {STALE_ELEMENT_RETRIES})"
+        ),
     )
     parser.add_argument(
         "--rate-move-limit",
@@ -409,6 +424,10 @@ def choose_interest_rate(current_rate: float, rate_move_limit: float) -> float:
     return max(0.0, current_rate + move)
 
 
+def is_stale_element_error(exc: Exception) -> bool:
+    return exc.__class__.__name__ == "StaleElementReferenceException"
+
+
 def replace_input_value(driver: Any, input_el: Any, value: float) -> None:
     input_el.click()
     driver.execute_script(
@@ -423,22 +442,61 @@ def replace_input_value(driver: Any, input_el: Any, value: float) -> None:
     )
 
 
-def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> None:
-    input_el = wait.until(EC.element_to_be_clickable((By.XPATH, interest_rate_input_xpath())))
-    human_pause(args)
-    replace_input_value(driver, input_el, rate)
+def verified_input_value(input_el: Any) -> float:
     actual_value = input_el.get_attribute("value") or ""
     try:
-        actual_rate = float(actual_value)
+        return float(actual_value)
     except ValueError:
-        actual_rate = float("nan")
-    if abs(actual_rate - round(rate, 2)) > 0.001:
-        replace_input_value(driver, input_el, rate)
+        return float("nan")
+
+
+def set_interest_rate_with_retries(driver: Any, wait: Any, By: Any, EC: Any, rate: float, args: argparse.Namespace) -> None:
+    rounded_rate = round(rate, 2)
+    last_exc: Exception | None = None
+
+    for attempt in range(1, args.stale_element_retries + 1):
+        try:
+            input_el = wait.until(EC.element_to_be_clickable((By.XPATH, interest_rate_input_xpath())))
+            replace_input_value(driver, input_el, rounded_rate)
+            actual_rate = verified_input_value(input_el)
+            if abs(actual_rate - rounded_rate) <= 0.001:
+                return
+
+            # Streamlit may have rerendered or rejected the first update. Find
+            # the field fresh and try one more replacement inside this attempt.
+            input_el = wait.until(EC.element_to_be_clickable((By.XPATH, interest_rate_input_xpath())))
+            replace_input_value(driver, input_el, rounded_rate)
+            actual_rate = verified_input_value(input_el)
+            if abs(actual_rate - rounded_rate) <= 0.001:
+                return
+        except Exception as exc:
+            if not is_stale_element_error(exc) or attempt == args.stale_element_retries:
+                raise
+            last_exc = exc
+            wait_for_game_turn_ready(driver, wait, By)
+            time.sleep(0.2 * attempt)
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Could not set interest-rate input to {rounded_rate:.2f}")
+
+
+def submit_turn(driver: Any, wait: Any, By: Any, EC: Any, Keys: Any, ActionChains: Any, rate: float, args: argparse.Namespace) -> None:
+    human_pause(args)
+    set_interest_rate_with_retries(driver, wait, By, EC, rate, args)
     human_pause(args)
 
-    next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
-    robust_click(driver, next_buttons[0], ActionChains)
-    wait_for_game_turn_ready(driver, wait, By)
+    for attempt in range(1, args.stale_element_retries + 1):
+        try:
+            next_buttons = wait.until(lambda d: find_clickable_text(d, By, "Next"))
+            robust_click(driver, next_buttons[0], ActionChains)
+            wait_for_game_turn_ready(driver, wait, By)
+            return
+        except Exception as exc:
+            if not is_stale_element_error(exc) or attempt == args.stale_element_retries:
+                raise
+            wait_for_game_turn_ready(driver, wait, By)
+            time.sleep(0.2 * attempt)
 
 
 def run_player(
@@ -533,6 +591,8 @@ def main() -> int:
         raise SystemExit("--players must be at least 1")
     if args.turns < 1:
         raise SystemExit("--turns must be at least 1")
+    if args.stale_element_retries < 1:
+        raise SystemExit("--stale-element-retries must be at least 1")
     selenium_api = require_selenium()
     all_samples: list[TurnSample] = []
     all_failures: list[Failure] = []
@@ -562,6 +622,7 @@ def main() -> int:
     print(f"Menu mandate: {args.mandate}")
     print(f"Concurrent browser players: {workers}")
     print(f"Random think time: {not args.no_think_time and USE_RANDOM_THINK_TIME}")
+    print(f"Stale element retries: {args.stale_element_retries}")
     print(f"Completed turns: {completed_turns}/{expected_turns}")
     print(f"Total wall time: {elapsed:.3f}s")
     if elapsed > 0:

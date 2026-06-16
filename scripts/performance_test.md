@@ -35,6 +35,7 @@ GAME_SCENARIO_LABEL = "Random"
 GAME_MANDATE_LABEL = "Inflation Target"
 PAGE_LOAD_TIMEOUT_SECONDS = 60.0
 ACTION_TIMEOUT_SECONDS = 120.0
+STALE_ELEMENT_RETRIES = 3
 RATE_MOVE_LIMIT = 1.0
 USE_RANDOM_THINK_TIME = True
 THINK_TIME_MEDIAN_SECONDS = 5.0
@@ -59,6 +60,7 @@ Then press Run in Spyder.
 - `TURNS_PER_PLAYER`: how many times each player chooses an interest rate using a 50% keep / 50% old-rate-plus-or-minus rule and clicks **Next**.
 - `HEADLESS_BROWSER`: set to `False` by default so you can watch the browser pass the menu. Set it to `True` for larger load tests.
 - `GAME_DIFFICULTY_LABEL`, `GAME_SCENARIO_LABEL`, and `GAME_MANDATE_LABEL`: menu choices the bot selects before clicking **Start Game**. The script targets the Streamlit radio groups named Difficulty, Scenario, and Mandate, so these values should match the visible radio option text.
+- `STALE_ELEMENT_RETRIES`: how many times Selenium re-finds a widget if Streamlit redraws the page after Selenium first found it. This protects against `StaleElementReferenceException`, where the input or button still appears on screen but Selenium's old reference points to a replaced widget.
 - `RATE_MOVE_LIMIT`: when the bot changes rates, the largest allowed move up or down from the old rate. The bot has a 50% chance to keep the old rate and a 50% chance to choose old rate plus/minus up to this value, floored at 0.
 - `USE_RANDOM_THINK_TIME`: adds human-like pauses before clicks and typing.
 - `THINK_TIME_MEDIAN_SECONDS`, `THINK_TIME_SIGMA`, `THINK_TIME_MIN_SECONDS`, and `THINK_TIME_MAX_SECONDS`: control the random wait distribution. The default is concentrated around fast actions of a few seconds with a long right tail.
@@ -91,7 +93,8 @@ Example fields:
 
 - `Players`: how many simulated browser players were attempted.
 - `Turns per player`: how many turns each player should take.
-- `Concurrent browser workers`: how many browser players were running at once.
+- `Concurrent browser players`: how many browser players were running at once.
+- `Stale element retries`: how many times Selenium will re-find a Streamlit widget after the page redraws it.
 - `Completed turns`: successful turns divided by expected turns. For example, `0/200` means none of the 200 expected turns completed.
 - `Throughput`: successful turns per second. If completed turns is `0`, throughput is also `0`.
 - `Turn response time statistics`: only appears when at least one turn succeeds.
@@ -102,7 +105,7 @@ could not find or click **Start Game** before `ACTION_TIMEOUT_SECONDS` expired. 
 that case the test never reached the interest-rate screen, so it is not evidence
 that Streamlit failed under turn load. Try these debugging steps:
 
-1. Set `NUMBER_OF_PLAYERS = 1` and `MAX_WORKERS = 1`.
+1. Set `NUMBER_OF_PLAYERS = 1`.
 2. Keep `HEADLESS_BROWSER = False` so you can watch the browser.
 3. Keep `ACTION_TIMEOUT_SECONDS = 120.0` if the app is waking up slowly.
 4. Look in `scripts/performance_test_artifacts` for the saved screenshot and HTML from the failed browser. The folder is created beside `performance_test.py`, even when Spyder runs with a different working directory.
